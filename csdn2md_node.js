@@ -205,7 +205,13 @@ function htmlToMarkdown(html) {
                                     // const languageMatch = className.match(/language-(\w+)/);
                                     // language = languageMatch ? languageMatch[0] : "";
                                     const languageMatch = className.split(" ");
-                                    language = languageMatch ? languageMatch[0] : "";
+                                    // 找到第一个 language- 开头的字符串
+                                    for (const item of languageMatch) {
+                                        if (item.startsWith("language-")) {
+                                            language = item;
+                                            break;
+                                        }
+                                    }
                                     language = language.replace("language-", "");
                                 } 
                                 // 老版本的代码块
