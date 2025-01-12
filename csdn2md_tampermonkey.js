@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      1.0.2
+// @version      1.0.3
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -83,15 +83,6 @@
      * @returns {string} - 转换后的 Markdown 字符串。
      */
     function htmlToMarkdown(html) {
-        const htype_map = {
-            一级标题: 1,
-            二级标题: 2,
-            三级标题: 3,
-            四级标题: 4,
-            五级标题: 5,
-            六级标题: 6,
-        };
-
         // // Create a DOM parser
         // const document = new JSDOM(html).window.document;
         // const content = document.getElementById("content_views");
@@ -133,14 +124,8 @@
                         case "h5":
                         case "h6":
                             {
-                                // 解析 id 里的 url 编码，如 %E4%B8%80%E7%BA%A7%E6%A0%87%E9%A2%98 -> 一级标题
-                                if (node.getAttribute("id")) {
-                                    const htype = decodeURIComponent(node.getAttribute("id"));
-                                    result += `${"#".repeat(htype_map[htype])} ${node.textContent.trim()}\n\n`;
-                                } else {
-                                    const htype = Number(node.tagName[1]);
-                                    result += `${"#".repeat(htype)} ${node.textContent.trim()}\n\n`;
-                                }
+                                const htype = Number(node.tagName[1]);
+                                result += `${"#".repeat(htype)} ${node.textContent.trim()}\n\n`;
                             }
                             break;
                         case "p":
@@ -247,12 +232,20 @@
                                 const codeNode = node.querySelector("code");
                                 if (codeNode) {
                                     const className = codeNode.className || "";
-                                    const languageMatch = className.match(/language-(\w+)/);
-                                    const language = languageMatch ? languageMatch[1] : "";
-
-                                    // const codeText = codeNode.textContent.replace(/^\s+|\s+$/g, '');
-                                    // result += `\`\`\`${language}\n${codeText}\n\`\`\`\n\n`;
-
+                                    let language = "";
+                                    // 新版本的代码块，class 含有 language-xxx
+                                    if (className.includes("language-")) {
+                                        // const languageMatch = className.match(/language-(\w+)/);
+                                        // language = languageMatch ? languageMatch[0] : "";
+                                        const languageMatch = className.split(" ");
+                                        language = languageMatch ? languageMatch[0] : "";
+                                        language = language.replace("language-", "");
+                                    } 
+                                    // 老版本的代码块
+                                    else if (className.startsWith("hljs")) {
+                                        const languageMatch = className.split(" ");
+                                        language = languageMatch ? languageMatch[1] : "";
+                                    }
                                     result += `\`\`\`${language}\n${processCodeBlock(codeNode)}\`\`\`\n\n`;
                                 } else {
                                     console.warn("Code block without <code> element:", node.outerHTML);

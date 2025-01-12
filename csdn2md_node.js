@@ -199,12 +199,20 @@ function htmlToMarkdown(html) {
                             const codeNode = node.querySelector("code");
                             if (codeNode) {
                                 const className = codeNode.className || "";
-                                const languageMatch = className.match(/language-(\w+)/);
-                                const language = languageMatch ? languageMatch[1] : "";
-
-                                // const codeText = codeNode.textContent.replace(/^\s+|\s+$/g, '');
-                                // result += `\`\`\`${language}\n${codeText}\n\`\`\`\n\n`;
-
+                                let language = "";
+                                // 新版本的代码块，class 含有 language-xxx
+                                if (className.includes("language-")) {
+                                    // const languageMatch = className.match(/language-(\w+)/);
+                                    // language = languageMatch ? languageMatch[0] : "";
+                                    const languageMatch = className.split(" ");
+                                    language = languageMatch ? languageMatch[0] : "";
+                                    language = language.replace("language-", "");
+                                } 
+                                // 老版本的代码块
+                                else if (className.startsWith("hljs")) {
+                                    const languageMatch = className.split(" ");
+                                    language = languageMatch ? languageMatch[1] : "";
+                                }
                                 result += `\`\`\`${language}\n${processCodeBlock(codeNode)}\`\`\`\n\n`;
                             } else {
                                 console.warn("Code block without <code> element:", node.outerHTML);
