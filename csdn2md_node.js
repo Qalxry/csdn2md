@@ -3,7 +3,7 @@
 // Date: 2025-01-11
 // Last Update: 2025-01-11
 // License: Polyform Strict License 1.0.0 (https://polyformproject.org/licenses/strict/1.0.0/)
-// Version: 1.0.0
+// Version: 1.0.1
 // SupportURL: https://github.com/Qalxry/csdn2md
 
 const { JSDOM } = require("jsdom");
@@ -31,6 +31,15 @@ function shrinkHtml(html) {
         .replace(/>\s+</g, '><')   // 去除标签之间的空白
         .replace(/\s{2,}/g, ' ')   // 多个空格压缩成一个
         .replace(/^\s+|\s+$/g, ''); // 去除首尾空白
+}
+
+/**
+ * 清除字符串中的特殊字符。
+ * @param {*} str 
+ * @returns 
+ */
+function clearSpecialChars(str) {
+    return str.replace(/[\s]{2,}/g, "").replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF\u00AD\u034F\u061C\u180E\u2800\u3164\uFFA0\uFFF9-\uFFFB]/g, "");
 }
 
 /**
@@ -258,14 +267,28 @@ function htmlToMarkdown(html) {
                             if (node_class) {
                                 if (node_class.includes("katex--inline")) {
                                     // class="katex-mathml"
-                                    const mathml = node.querySelector(".katex-mathml").textContent.replace(/[\s]{2,}/g, '').replace(/[\u200B-\u200D\uFEFF]/g, '');
-                                    const katex_html = node.querySelector(".katex-html").textContent.replace(/[\u200B-\u200D\uFEFF]/g, '');
-                                    result += ` $${mathml.replace(katex_html, '')}$ `;
+                                    const mathml = clearSpecialChars(node.querySelector(".katex-mathml").textContent);
+                                    const katex_html = clearSpecialChars(node.querySelector(".katex-html").textContent);
+                                    // result += ` $${mathml.replace(katex_html, "")}$ `;
+                                    
+                                    if (mathml.startsWith(katex_html)) {
+                                        result += ` $${mathml.replace(katex_html, "")}$ `;
+                                    } else {
+                                        // 字符串切片，去掉 mathml 开头等同长度的 katex_html，注意不能用 replace，因为 katex_html 里的字符顺序可能会变
+                                        result += ` $${mathml.slice(katex_html.length)}$ `;
+                                    }
                                     break;
                                 } else if (node_class.includes("katex--display")) {
-                                    const mathml = node.querySelector(".katex-mathml").textContent.replace(/[\s]{2,}/g, '').replace(/[\u200B-\u200D\uFEFF]/g, '');
-                                    const katex_html = node.querySelector(".katex-html").textContent.replace(/[\u200B-\u200D\uFEFF]/g, '');
-                                    result += `$$\n${mathml.replace(katex_html, '')}\n$$\n\n`;
+                                    const mathml = clearSpecialChars(node.querySelector(".katex-mathml").textContent);
+                                    const katex_html = clearSpecialChars(node.querySelector(".katex-html").textContent);
+                                    // result += `$$\n${mathml.replace(katex_html, "")}\n$$\n\n`;
+
+                                    if (mathml.startsWith(katex_html)) {
+                                        result += `$$\n${mathml.replace(katex_html, "")}\n$$\n\n`;
+                                    } else {
+                                        // 字符串切片，去掉 mathml 开头等同长度的 katex_html，注意不能用 replace，因为 katex_html 里的字符顺序可能会变
+                                        result += `$$\n${mathml.slice(katex_html.length)}\n$$\n\n`;
+                                    }
                                     break;
                                 }
                             }

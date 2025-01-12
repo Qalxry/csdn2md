@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      1.0.0
+// @version      1.0.2
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -66,6 +66,15 @@
             .replace(/>\s+</g, "><") // 去除标签之间的空白
             .replace(/\s{2,}/g, " ") // 多个空格压缩成一个
             .replace(/^\s+|\s+$/g, ""); // 去除首尾空白
+    }
+
+    /**
+     * 清除字符串中的特殊字符。
+     * @param {*} str 
+     * @returns 
+     */
+    function clearSpecialChars(str) {
+        return str.replace(/[\s]{2,}/g, "").replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF\u00AD\u034F\u061C\u180E\u2800\u3164\uFFA0\uFFF9-\uFFFB]/g, "");
     }
 
     /**
@@ -306,24 +315,28 @@
                                 if (node_class) {
                                     if (node_class.includes("katex--inline")) {
                                         // class="katex-mathml"
-                                        const mathml = node
-                                            .querySelector(".katex-mathml")
-                                            .textContent.replace(/[\s]{2,}/g, "")
-                                            .replace(/[\u200B-\u200D\uFEFF]/g, "");
-                                        const katex_html = node
-                                            .querySelector(".katex-html")
-                                            .textContent.replace(/[\u200B-\u200D\uFEFF]/g, "");
-                                        result += ` $${mathml.replace(katex_html, "")}$ `;
+                                        const mathml = clearSpecialChars(node.querySelector(".katex-mathml").textContent);
+                                        const katex_html = clearSpecialChars(node.querySelector(".katex-html").textContent);
+                                        // result += ` $${mathml.replace(katex_html, "")}$ `;
+                                        
+                                        if (mathml.startsWith(katex_html)) {
+                                            result += ` $${mathml.replace(katex_html, "")}$ `;
+                                        } else {
+                                            // 字符串切片，去掉 mathml 开头等同长度的 katex_html，注意不能用 replace，因为 katex_html 里的字符顺序可能会变
+                                            result += ` $${mathml.slice(katex_html.length)}$ `;
+                                        }
                                         break;
                                     } else if (node_class.includes("katex--display")) {
-                                        const mathml = node
-                                            .querySelector(".katex-mathml")
-                                            .textContent.replace(/[\s]{2,}/g, "")
-                                            .replace(/[\u200B-\u200D\uFEFF]/g, "");
-                                        const katex_html = node
-                                            .querySelector(".katex-html")
-                                            .textContent.replace(/[\u200B-\u200D\uFEFF]/g, "");
-                                        result += `$$\n${mathml.replace(katex_html, "")}\n$$\n\n`;
+                                        const mathml = clearSpecialChars(node.querySelector(".katex-mathml").textContent);
+                                        const katex_html = clearSpecialChars(node.querySelector(".katex-html").textContent);
+                                        // result += `$$\n${mathml.replace(katex_html, "")}\n$$\n\n`;
+
+                                        if (mathml.startsWith(katex_html)) {
+                                            result += `$$\n${mathml.replace(katex_html, "")}\n$$\n\n`;
+                                        } else {
+                                            // 字符串切片，去掉 mathml 开头等同长度的 katex_html，注意不能用 replace，因为 katex_html 里的字符顺序可能会变
+                                            result += `$$\n${mathml.slice(katex_html.length)}\n$$\n\n`;
+                                        }
                                         break;
                                     }
                                 }
