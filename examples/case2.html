@@ -1,0 +1,663 @@
+<div id="content_views" class="markdown_views prism-atom-one-dark">
+    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+        <path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block" style="-webkit-tap-highlight-color: rgba(0, 0, 0, 0);"></path>
+    </svg>
+    <p></p> 
+<div class="toc"> 
+<h4><a name="t0"></a>这里写自定义目录标题</h4> 
+<ul><li><a href="#Markdown_2" rel="nofollow" target="_self">欢迎使用Markdown编辑器</a></li><li><ul><li><a href="#_6" rel="nofollow" target="_self">新的改变</a></li><li><a href="#_19" rel="nofollow" target="_self">功能快捷键</a></li><li><a href="#_35" rel="nofollow" target="_self">合理的创建标题，有助于目录的生成</a></li><li><a href="#_41" rel="nofollow" target="_self">如何改变文本的样式</a></li><li><a href="#_57" rel="nofollow" target="_self">插入链接与图片</a></li><li><a href="#_71" rel="nofollow" target="_self">如何插入一段漂亮的代码片</a></li><li><a href="#_79" rel="nofollow" target="_self">生成一个适合你的列表</a></li><li><a href="#_92" rel="nofollow" target="_self">创建一个表格</a></li><li><ul><li><a href="#_100" rel="nofollow" target="_self">设定内容居中、居左、居右</a></li><li><a href="#SmartyPants_108" rel="nofollow" target="_self">SmartyPants</a></li></ul> 
+</li><li><a href="#_116" rel="nofollow" target="_self">创建一个自定义列表</a></li><li><a href="#_124" rel="nofollow" target="_self">如何创建一个注脚</a></li><li><a href="#_130" rel="nofollow" target="_self">注释也是必不可少的</a></li><li><a href="#KaTeX_136" rel="nofollow" target="_self">KaTeX数学公式</a></li><li><a href="#_149" rel="nofollow" target="_self">新的甘特图功能，丰富你的文章</a></li><li><a href="#UML__163" rel="nofollow" target="_self">UML 图表</a></li><li><a href="#FLowchart_191" rel="nofollow" target="_self">FLowchart流程图</a></li><li><a href="#_208" rel="nofollow" target="_self">导出与导入</a></li><li><ul><li><a href="#_210" rel="nofollow" target="_self">导出</a></li><li><a href="#_213" rel="nofollow" target="_self">导入</a></li></ul> 
+</li></ul> 
+</li></ul> 
+</div> 
+<p></p> 
+<h2><a name="t1"></a><a id="Markdown_2"></a>欢迎使用Markdown编辑器</h2> 
+<p>你好！ 这是你第一次使用 <strong>Markdown编辑器</strong> 所展示的欢迎页。如果你想学习如何使用Markdown编辑器, 可以仔细阅读这篇文章，了解一下Markdown的基本语法知识。</p> 
+<h3><a name="t2"></a><a id="_6"></a>新的改变</h3> 
+<p>我们对Markdown编辑器进行了一些功能拓展与语法支持，除了标准的Markdown编辑器功能，我们增加了如下几点新功能，帮助你用它写博客：</p> 
+<ol><li><strong>全新的界面设计</strong> ，将会带来全新的写作体验；</li><li>在创作中心设置你喜爱的代码高亮样式，Markdown <strong>将代码片显示选择的高亮样式</strong> 进行展示；</li><li>增加了 <strong>图片拖拽</strong> 功能，你可以将本地的图片直接拖拽到编辑区域直接展示；</li><li>全新的 <strong>KaTeX数学公式</strong> 语法；</li><li>增加了支持<strong>甘特图的mermaid语法<sup class="footnote-ref"><a href="#fn1" rel="nofollow" id="fnref1" target="_self">1</a></sup></strong> 功能；</li><li>增加了 <strong>多屏幕编辑</strong> Markdown文章功能；</li><li>增加了 <strong>焦点写作模式、预览模式、简洁写作模式、左右区域同步滚轮设置</strong> 等功能，功能按钮位于编辑区域与预览区域中间；</li><li>增加了 <strong>检查列表</strong> 功能。</li></ol> 
+<h3><a name="t3"></a><a id="_19"></a>功能快捷键</h3> 
+<p>撤销：<kbd>Ctrl/Command</kbd> + <kbd>Z</kbd><br> 重做：<kbd>Ctrl/Command</kbd> + <kbd>Y</kbd><br> 加粗：<kbd>Ctrl/Command</kbd> + <kbd>B</kbd><br> 斜体：<kbd>Ctrl/Command</kbd> + <kbd>I</kbd><br> 标题：<kbd>Ctrl/Command</kbd> + <kbd>Shift</kbd> + <kbd>H</kbd><br> 无序列表：<kbd>Ctrl/Command</kbd> + <kbd>Shift</kbd> + <kbd>U</kbd><br> 有序列表：<kbd>Ctrl/Command</kbd> + <kbd>Shift</kbd> + <kbd>O</kbd><br> 检查列表：<kbd>Ctrl/Command</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd><br> 插入代码：<kbd>Ctrl/Command</kbd> + <kbd>Shift</kbd> + <kbd>K</kbd><br> 插入链接：<kbd>Ctrl/Command</kbd> + <kbd>Shift</kbd> + <kbd>L</kbd><br> 插入图片：<kbd>Ctrl/Command</kbd> + <kbd>Shift</kbd> + <kbd>G</kbd><br> 查找：<kbd>Ctrl/Command</kbd> + <kbd>F</kbd><br> 替换：<kbd>Ctrl/Command</kbd> + <kbd>G</kbd></p> 
+<h3><a name="t4"></a><a id="_35"></a>合理的创建标题，有助于目录的生成</h3> 
+<p>直接输入1次<kbd>#</kbd>，并按下<kbd>space</kbd>后，将生成1级标题。<br> 输入2次<kbd>#</kbd>，并按下<kbd>space</kbd>后，将生成2级标题。<br> 以此类推，我们支持6级标题。有助于使用<code>TOC</code>语法后生成一个完美的目录。</p> 
+<h3><a name="t5"></a><a id="_41"></a>如何改变文本的样式</h3> 
+<p><em>强调文本</em> <em>强调文本</em></p> 
+<p><strong>加粗文本</strong> <strong>加粗文本</strong></p> 
+<p><mark>标记文本</mark></p> 
+<p><s>删除文本</s></p> 
+<blockquote> 
+<p>引用文本</p> 
+</blockquote> 
+<p>H<sub>2</sub>O is是液体。</p> 
+<p>2<sup>10</sup> 运算结果是 1024.</p> 
+<h3><a name="t6"></a><a id="_57"></a>插入链接与图片</h3> 
+<p>链接: <a href="https://www.csdn.net/">link</a>.</p> 
+<p>图片: <img src="https://imgconvert.csdnimg.cn/aHR0cHM6Ly9hdmF0YXIuY3Nkbi5uZXQvNy83L0IvMV9yYWxmX2h4MTYzY29tLmpwZw" alt="Alt"></p> 
+<p>带尺寸的图片: <img src="https://imgconvert.csdnimg.cn/aHR0cHM6Ly9hdmF0YXIuY3Nkbi5uZXQvNy83L0IvMV9yYWxmX2h4MTYzY29tLmpwZw" alt="Alt" width="30" height="30"></p> 
+<p>居中的图片: <img src="https://imgconvert.csdnimg.cn/aHR0cHM6Ly9hdmF0YXIuY3Nkbi5uZXQvNy83L0IvMV9yYWxmX2h4MTYzY29tLmpwZw#pic_center" alt="Alt"></p> 
+<p>居中并且带尺寸的图片: <img src="https://imgconvert.csdnimg.cn/aHR0cHM6Ly9hdmF0YXIuY3Nkbi5uZXQvNy83L0IvMV9yYWxmX2h4MTYzY29tLmpwZw#pic_center" alt="Alt" width="30" height="30"></p> 
+<p>当然，我们为了让用户更加便捷，我们增加了图片拖拽功能。</p> 
+<h3><a name="t7"></a><a id="_71"></a>如何插入一段漂亮的代码片</h3> 
+<p>去<a href="https://mp.csdn.net/console/configBlog">博客设置</a>页面，选择一款你喜欢的代码片高亮样式，下面展示同样高亮的 <code>代码片</code>.</p> 
+<pre data-index="0" class="set-code-show prettyprint"><code class="prism language-javascript has-numbering" onclick="mdcp.copyCode(event)" style="position: unset;"><span class="token comment">// An highlighted block</span>
+<span class="token keyword">var</span> foo <span class="token operator">=</span> <span class="token string">'bar'</span><span class="token punctuation">;</span>
+<div class="hljs-button {2} add_def" data-title="复制"></div></code><ul class="pre-numbering" style=""><li style="color: rgb(153, 153, 153);">1</li><li style="color: rgb(153, 153, 153);">2</li></ul><button class="btn-code-notes mdeditor" data-report-click="{&quot;spm&quot;:&quot;3001.10436&quot;,&quot;extra&quot;:{&quot;index&quot;:0,&quot;runIdx&quot;:-1}}">代码解释</button></pre> 
+<h3><a name="t8"></a><a id="_79"></a>生成一个适合你的列表</h3> 
+<ul><li>项目 
+<ul><li>项目 
+<ul><li>项目</li></ul> </li></ul> </li></ul> 
+<ol><li>项目1</li><li>项目2</li><li>项目3</li></ol> 
+<ul><li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled"> 计划任务</li><li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" checked="true" disabled="disabled"> 完成任务</li></ul> 
+<h3><a name="t9"></a><a id="_92"></a>创建一个表格</h3> 
+<p>一个简单的表格是这么创建的：</p> 
+<div class="table-box"><table><thead><tr><th>项目</th><th>Value</th></tr></thead><tbody><tr><td>电脑</td><td>$1600</td></tr><tr><td>手机</td><td>$12</td></tr><tr><td>导管</td><td>$1</td></tr></tbody></table></div> 
+<h4><a name="t10"></a><a id="_100"></a>设定内容居中、居左、居右</h4> 
+<p>使用<code>:---------:</code>居中<br> 使用<code>:----------</code>居左<br> 使用<code>----------:</code>居右</p> 
+<div class="table-box"><table><thead><tr><th align="center">第一列</th><th align="right">第二列</th><th align="left">第三列</th></tr></thead><tbody><tr><td align="center">第一列文本居中</td><td align="right">第二列文本居右</td><td align="left">第三列文本居左</td></tr></tbody></table></div> 
+<h4><a name="t11"></a><a id="SmartyPants_108"></a>SmartyPants</h4> 
+<p>SmartyPants将ASCII标点字符转换为“智能”印刷标点HTML实体。例如：</p> 
+<div class="table-box"><table><thead><tr><th>TYPE</th><th>ASCII</th><th><abbr title="超文本标记语言">HTML</abbr></th></tr></thead><tbody><tr><td>Single backticks</td><td><code>'Isn't this fun?'</code></td><td>‘Isn’t this fun?’</td></tr><tr><td>Quotes</td><td><code>"Isn't this fun?"</code></td><td>“Isn’t this fun?”</td></tr><tr><td>Dashes</td><td><code>-- is en-dash, --- is em-dash</code></td><td>– is en-dash, — is em-dash</td></tr></tbody></table></div> 
+<h3><a name="t12"></a><a id="_116"></a>创建一个自定义列表</h3> 
+<dl> 
+
+Markdown 
+
+<dd>
+Text-to- 
+<abbr title="超文本标记语言">HTML</abbr> conversion tool 
+</dd> 
+
+Authors 
+
+<dd>
+John 
+</dd> 
+<dd>
+Luke 
+</dd> 
+</dl> 
+<h3><a name="t13"></a><a id="_124"></a>如何创建一个注脚</h3> 
+<p>一个具有注脚的文本。<sup class="footnote-ref"><a href="#fn2" rel="nofollow" id="fnref2" target="_self">2</a></sup></p> 
+<h3><a name="t14"></a><a id="_130"></a>注释也是必不可少的</h3> 
+<p>Markdown将文本转换为 <abbr title="超文本标记语言">HTML</abbr>。</p> 
+<h3><a name="t15"></a><a id="KaTeX_136"></a>KaTeX数学公式</h3> 
+<p>您可以使用渲染LaTeX数学表达式 <a href="https://khan.github.io/KaTeX/" rel="nofollow">KaTeX</a>:</p> 
+<p>Gamma公式展示 <span class="katex--inline"><span class="katex"><span class="katex-mathml"> 
+
+
+
+
+Γ 
+
+
+( 
+
+
+n 
+
+
+) 
+
+
+= 
+
+
+( 
+
+
+n 
+
+
+− 
+
+
+1 
+
+
+) 
+
+
+! 
+
+
+
+∀ 
+
+
+n 
+
+
+∈ 
+
+
+N 
+
+
+
+\Gamma(n) = (n-1)!\quad\forall n\in\mathbb N 
+
+
+</span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord">Γ</span><span class="mopen">(</span><span class="mord mathnormal">n</span><span class="mclose">)</span><span class="mspace" style="margin-right: 0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right: 0.2778em;"></span></span><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mopen">(</span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right: 0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right: 0.2222em;"></span></span><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord">1</span><span class="mclose">)!</span><span class="mspace" style="margin-right: 1em;"></span><span class="mord">∀</span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right: 0.2778em;"></span><span class="mrel">∈</span><span class="mspace" style="margin-right: 0.2778em;"></span></span><span class="base"><span class="strut" style="height: 0.6889em;"></span><span class="mord mathbb">N</span></span></span></span></span> 是通过欧拉积分</p> 
+<p><span class="katex--display"><span class="katex-display"><span class="katex"><span class="katex-mathml"> 
+
+
+
+
+Γ 
+
+
+( 
+
+
+z 
+
+
+) 
+
+
+= 
+
+
+
+∫ 
+
+
+0 
+
+
+∞ 
+
+
+
+
+t 
+
+
+
+z 
+
+
+− 
+
+
+1 
+
+
+
+
+
+e 
+
+
+
+− 
+
+
+t 
+
+
+
+
+d 
+
+
+t 
+  
+
+. 
+
+
+
+\Gamma(z) = \int_0^\infty t^{z-1}e^{-t}dt\,. 
+
+
+</span><span class="katex-html"><span class="base"><span class="strut" style="height: 1em; vertical-align: -0.25em;"></span><span class="mord">Γ</span><span class="mopen">(</span><span style="margin-right: 0.044em;" class="mord mathnormal">z</span><span class="mclose">)</span><span class="mspace" style="margin-right: 0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right: 0.2778em;"></span></span><span class="base"><span class="strut" style="height: 2.3262em; vertical-align: -0.9119em;"></span><span class="mop"><span style="margin-right: 0.4445em; position: relative; top: -0.0011em;" class="mop op-symbol large-op">∫</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height: 1.4143em;"><span class="" style="top: -1.7881em; margin-left: -0.4445em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span><span class="" style="top: -3.8129em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">∞</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height: 0.9119em;"><span class=""></span></span></span></span></span></span><span class="mspace" style="margin-right: 0.1667em;"></span><span class="mord"><span class="mord mathnormal">t</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height: 0.8641em;"><span class="" style="top: -3.113em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span style="margin-right: 0.044em;" class="mord mathnormal mtight">z</span><span class="mbin mtight">−</span><span class="mord mtight">1</span></span></span></span></span></span></span></span></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height: 0.8436em;"><span class="" style="top: -3.113em; margin-right: 0.05em;"><span class="pstrut" style="height: 2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mathnormal mtight">t</span></span></span></span></span></span></span></span></span><span class="mord mathnormal">d</span><span class="mord mathnormal">t</span><span class="mspace" style="margin-right: 0.1667em;"></span><span class="mord">.</span></span></span></span></span></span></p> 
+<blockquote> 
+<p>你可以找到更多关于的信息 <strong>LaTeX</strong> 数学表达式<a href="http://meta.math.stackexchange.com/questions/5020/mathjax-basic-tutorial-and-quick-reference" rel="nofollow">here</a>.</p> 
+</blockquote> 
+<h3><a name="t16"></a><a id="_149"></a>新的甘特图功能，丰富你的文章</h3> 
+<div class="mermaid"> 
+<svg id="mermaid-svg-Z9PxT2ZmFv0DH9eN" width="100%" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 196" height="196" style="max-width: 1200px;" class="mermaid-svg"> 
+<style>#mermaid-svg-Z9PxT2ZmFv0DH9eN {font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;fill:#333;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .error-icon{fill:#552222;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .error-text{fill:#552222;stroke:#552222;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .edge-thickness-normal{stroke-width:2px;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .edge-thickness-thick{stroke-width:3.5px;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .edge-pattern-solid{stroke-dasharray:0;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .edge-pattern-dashed{stroke-dasharray:3;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .edge-pattern-dotted{stroke-dasharray:2;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .marker{fill:#333333;stroke:#333333;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .marker.cross{stroke:#333333;}#mermaid-svg-Z9PxT2ZmFv0DH9eN svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .mermaid-main-font{font-family:"trebuchet ms",verdana,arial,sans-serif;font-family:var(--mermaid-font-family);}#mermaid-svg-Z9PxT2ZmFv0DH9eN .exclude-range{fill:#eeeeee;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .section{stroke:none;opacity:0.2;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .section0{fill:rgba(102, 102, 255, 0.49);}#mermaid-svg-Z9PxT2ZmFv0DH9eN .section2{fill:#fff400;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .section1,#mermaid-svg-Z9PxT2ZmFv0DH9eN .section3{fill:white;opacity:0.2;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .sectionTitle0{fill:#333;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .sectionTitle1{fill:#333;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .sectionTitle2{fill:#333;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .sectionTitle3{fill:#333;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .sectionTitle{text-anchor:start;font-family:'trebuchet ms',verdana,arial,sans-serif;font-family:var(--mermaid-font-family);}#mermaid-svg-Z9PxT2ZmFv0DH9eN .grid .tick{stroke:lightgrey;opacity:0.8;shape-rendering:crispEdges;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .grid .tick text{font-family:"trebuchet ms",verdana,arial,sans-serif;fill:#333;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .grid path{stroke-width:0;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .today{fill:none;stroke:red;stroke-width:2px;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .task{stroke-width:2;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .taskText{text-anchor:middle;font-family:'trebuchet ms',verdana,arial,sans-serif;font-family:var(--mermaid-font-family);}#mermaid-svg-Z9PxT2ZmFv0DH9eN .taskTextOutsideRight{fill:black;text-anchor:start;font-family:'trebuchet ms',verdana,arial,sans-serif;font-family:var(--mermaid-font-family);}#mermaid-svg-Z9PxT2ZmFv0DH9eN .taskTextOutsideLeft{fill:black;text-anchor:end;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .task.clickable{cursor:pointer;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .taskText.clickable{cursor:pointer;fill:#003163!important;font-weight:bold;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .taskTextOutsideLeft.clickable{cursor:pointer;fill:#003163!important;font-weight:bold;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .taskTextOutsideRight.clickable{cursor:pointer;fill:#003163!important;font-weight:bold;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .taskText0,#mermaid-svg-Z9PxT2ZmFv0DH9eN .taskText1,#mermaid-svg-Z9PxT2ZmFv0DH9eN .taskText2,#mermaid-svg-Z9PxT2ZmFv0DH9eN .taskText3{fill:white;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .task0,#mermaid-svg-Z9PxT2ZmFv0DH9eN .task1,#mermaid-svg-Z9PxT2ZmFv0DH9eN .task2,#mermaid-svg-Z9PxT2ZmFv0DH9eN .task3{fill:#8a90dd;stroke:#534fbc;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .taskTextOutside0,#mermaid-svg-Z9PxT2ZmFv0DH9eN .taskTextOutside2{fill:black;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .taskTextOutside1,#mermaid-svg-Z9PxT2ZmFv0DH9eN .taskTextOutside3{fill:black;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .active0,#mermaid-svg-Z9PxT2ZmFv0DH9eN .active1,#mermaid-svg-Z9PxT2ZmFv0DH9eN .active2,#mermaid-svg-Z9PxT2ZmFv0DH9eN .active3{fill:#bfc7ff;stroke:#534fbc;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .activeText0,#mermaid-svg-Z9PxT2ZmFv0DH9eN .activeText1,#mermaid-svg-Z9PxT2ZmFv0DH9eN .activeText2,#mermaid-svg-Z9PxT2ZmFv0DH9eN .activeText3{fill:black!important;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .done0,#mermaid-svg-Z9PxT2ZmFv0DH9eN .done1,#mermaid-svg-Z9PxT2ZmFv0DH9eN .done2,#mermaid-svg-Z9PxT2ZmFv0DH9eN .done3{stroke:grey;fill:lightgrey;stroke-width:2;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .doneText0,#mermaid-svg-Z9PxT2ZmFv0DH9eN .doneText1,#mermaid-svg-Z9PxT2ZmFv0DH9eN .doneText2,#mermaid-svg-Z9PxT2ZmFv0DH9eN .doneText3{fill:black!important;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .crit0,#mermaid-svg-Z9PxT2ZmFv0DH9eN .crit1,#mermaid-svg-Z9PxT2ZmFv0DH9eN .crit2,#mermaid-svg-Z9PxT2ZmFv0DH9eN .crit3{stroke:#ff8888;fill:red;stroke-width:2;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .activeCrit0,#mermaid-svg-Z9PxT2ZmFv0DH9eN .activeCrit1,#mermaid-svg-Z9PxT2ZmFv0DH9eN .activeCrit2,#mermaid-svg-Z9PxT2ZmFv0DH9eN .activeCrit3{stroke:#ff8888;fill:#bfc7ff;stroke-width:2;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .doneCrit0,#mermaid-svg-Z9PxT2ZmFv0DH9eN .doneCrit1,#mermaid-svg-Z9PxT2ZmFv0DH9eN .doneCrit2,#mermaid-svg-Z9PxT2ZmFv0DH9eN .doneCrit3{stroke:#ff8888;fill:lightgrey;stroke-width:2;cursor:pointer;shape-rendering:crispEdges;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .milestone{transform:rotate(45deg) scale(0.8,0.8);}#mermaid-svg-Z9PxT2ZmFv0DH9eN .milestoneText{font-style:italic;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .doneCritText0,#mermaid-svg-Z9PxT2ZmFv0DH9eN .doneCritText1,#mermaid-svg-Z9PxT2ZmFv0DH9eN .doneCritText2,#mermaid-svg-Z9PxT2ZmFv0DH9eN .doneCritText3{fill:black!important;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .activeCritText0,#mermaid-svg-Z9PxT2ZmFv0DH9eN .activeCritText1,#mermaid-svg-Z9PxT2ZmFv0DH9eN .activeCritText2,#mermaid-svg-Z9PxT2ZmFv0DH9eN .activeCritText3{fill:black!important;}#mermaid-svg-Z9PxT2ZmFv0DH9eN .titleText{text-anchor:middle;font-size:18px;fill:#333;font-family:'trebuchet ms',verdana,arial,sans-serif;font-family:var(--mermaid-font-family);}#mermaid-svg-Z9PxT2ZmFv0DH9eN :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style> 
+<g></g> 
+<g></g> 
+<g class="grid" transform="translate(75, 146)" fill="none" font-size="10" text-anchor="middle"> 
+<path class="domain" stroke="currentColor" d="M0,-111V0H1050V-111"></path> 
+<g class="tick" opacity="1" transform="translate(66,0)"> 
+<line stroke="currentColor" y2="-111"></line> 
+<text fill="#000" y="3" dy="1em" style="text-anchor: middle;" stroke="none" font-size="10">
+2014-01-07 
+</text> 
+</g> 
+<g class="tick" opacity="1" transform="translate(197,0)"> 
+<line stroke="currentColor" y2="-111"></line> 
+<text fill="#000" y="3" dy="1em" style="text-anchor: middle;" stroke="none" font-size="10">
+2014-01-09 
+</text> 
+</g> 
+<g class="tick" opacity="1" transform="translate(328,0)"> 
+<line stroke="currentColor" y2="-111"></line> 
+<text fill="#000" y="3" dy="1em" style="text-anchor: middle;" stroke="none" font-size="10">
+2014-01-11 
+</text> 
+</g> 
+<g class="tick" opacity="1" transform="translate(459,0)"> 
+<line stroke="currentColor" y2="-111"></line> 
+<text fill="#000" y="3" dy="1em" style="text-anchor: middle;" stroke="none" font-size="10">
+2014-01-13 
+</text> 
+</g> 
+<g class="tick" opacity="1" transform="translate(591,0)"> 
+<line stroke="currentColor" y2="-111"></line> 
+<text fill="#000" y="3" dy="1em" style="text-anchor: middle;" stroke="none" font-size="10">
+2014-01-15 
+</text> 
+</g> 
+<g class="tick" opacity="1" transform="translate(722,0)"> 
+<line stroke="currentColor" y2="-111"></line> 
+<text fill="#000" y="3" dy="1em" style="text-anchor: middle;" stroke="none" font-size="10">
+2014-01-17 
+</text> 
+</g> 
+<g class="tick" opacity="1" transform="translate(853,0)"> 
+<line stroke="currentColor" y2="-111"></line> 
+<text fill="#000" y="3" dy="1em" style="text-anchor: middle;" stroke="none" font-size="10">
+2014-01-19 
+</text> 
+</g> 
+<g class="tick" opacity="1" transform="translate(984,0)"> 
+<line stroke="currentColor" y2="-111"></line> 
+<text fill="#000" y="3" dy="1em" style="text-anchor: middle;" stroke="none" font-size="10">
+2014-01-21 
+</text> 
+</g> 
+</g> 
+<g> 
+<rect x="0" y="48" width="1162.5" height="24" class="section section0"></rect> 
+<rect x="0" y="72" width="1162.5" height="24" class="section section0"></rect> 
+<rect x="0" y="96" width="1162.5" height="24" class="section section0"></rect> 
+<rect x="0" y="120" width="1162.5" height="24" class="section section0"></rect> 
+</g> 
+<g> 
+<rect id="des1" rx="3" ry="3" x="75" y="50" width="131" height="20" class="task done0 "></rect> 
+<rect id="des2" rx="3" ry="3" x="272" y="74" width="197" height="20" class="task active0 "></rect> 
+<rect id="des3" rx="3" ry="3" x="469" y="98" width="328" height="20" class="task task0 "></rect> 
+<rect id="des4" rx="3" ry="3" x="797" y="122" width="328" height="20" class="task task0 "></rect> 
+<text id="des1-text" font-size="12" x="140.5" y="64" text-height="20" class=" taskText taskText0  doneText0 width-36">
+已完成 
+</text> 
+<text id="des2-text" font-size="12" x="370.5" y="88" text-height="20" class=" taskText taskText0 activeText0 width-36">
+进行中 
+</text> 
+<text id="des3-text" font-size="12" x="633" y="112" text-height="20" class=" taskText taskText0  width-36">
+计划一 
+</text> 
+<text id="des4-text" font-size="12" x="961" y="136" text-height="20" class=" taskText taskText0  width-36">
+计划二 
+</text> 
+</g> 
+<g> 
+<text dy="0em" x="10" y="98" font-size="18" class="sectionTitle sectionTitle0"> 
+<tspan alignment-baseline="central" x="10">
+现有任务 
+</tspan> 
+</text> 
+</g> 
+<g class="today"> 
+<line x1="264141" x2="264141" y1="25" y2="171" class="today"></line> 
+</g> 
+<text x="600" y="25" class="titleText">
+Adding GANTT diagram functionality to mermaid 
+</text> 
+</svg> 
+</div> 
+<ul><li>关于 <strong>甘特图</strong> 语法，参考 <a href="https://mermaidjs.github.io/" rel="nofollow">这儿</a>,</li></ul> 
+<h3><a name="t17"></a><a id="UML__163"></a>UML 图表</h3> 
+<p>可以使用UML图表进行渲染。 <a href="https://mermaidjs.github.io/" rel="nofollow">Mermaid</a>. 例如下面产生的一个序列图：</p> 
+<div class="mermaid"> 
+<svg id="mermaid-svg-qVGg1Q5DryEhe4ua" width="100%" xmlns="http://www.w3.org/2000/svg" height="584" style="max-width: 916px;" viewBox="-50 -10 916 584" class="mermaid-svg"> 
+<style>#mermaid-svg-qVGg1Q5DryEhe4ua {font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;fill:#333;}#mermaid-svg-qVGg1Q5DryEhe4ua .error-icon{fill:#552222;}#mermaid-svg-qVGg1Q5DryEhe4ua .error-text{fill:#552222;stroke:#552222;}#mermaid-svg-qVGg1Q5DryEhe4ua .edge-thickness-normal{stroke-width:2px;}#mermaid-svg-qVGg1Q5DryEhe4ua .edge-thickness-thick{stroke-width:3.5px;}#mermaid-svg-qVGg1Q5DryEhe4ua .edge-pattern-solid{stroke-dasharray:0;}#mermaid-svg-qVGg1Q5DryEhe4ua .edge-pattern-dashed{stroke-dasharray:3;}#mermaid-svg-qVGg1Q5DryEhe4ua .edge-pattern-dotted{stroke-dasharray:2;}#mermaid-svg-qVGg1Q5DryEhe4ua .marker{fill:#333333;stroke:#333333;}#mermaid-svg-qVGg1Q5DryEhe4ua .marker.cross{stroke:#333333;}#mermaid-svg-qVGg1Q5DryEhe4ua svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;}#mermaid-svg-qVGg1Q5DryEhe4ua .actor{stroke:hsl(259.6261682243, 59.7765363128%, 87.9019607843%);fill:#ECECFF;}#mermaid-svg-qVGg1Q5DryEhe4ua text.actor&gt;tspan{fill:black;stroke:none;}#mermaid-svg-qVGg1Q5DryEhe4ua .actor-line{stroke:grey;}#mermaid-svg-qVGg1Q5DryEhe4ua .messageLine0{stroke-width:1.5;stroke-dasharray:none;stroke:#333;}#mermaid-svg-qVGg1Q5DryEhe4ua .messageLine1{stroke-width:1.5;stroke-dasharray:2,2;stroke:#333;}#mermaid-svg-qVGg1Q5DryEhe4ua #arrowhead path{fill:#333;stroke:#333;}#mermaid-svg-qVGg1Q5DryEhe4ua .sequenceNumber{fill:white;}#mermaid-svg-qVGg1Q5DryEhe4ua #sequencenumber{fill:#333;}#mermaid-svg-qVGg1Q5DryEhe4ua #crosshead path{fill:#333;stroke:#333;}#mermaid-svg-qVGg1Q5DryEhe4ua .messageText{fill:#333;stroke:#333;}#mermaid-svg-qVGg1Q5DryEhe4ua .labelBox{stroke:hsl(259.6261682243, 59.7765363128%, 87.9019607843%);fill:#ECECFF;}#mermaid-svg-qVGg1Q5DryEhe4ua .labelText,#mermaid-svg-qVGg1Q5DryEhe4ua .labelText&gt;tspan{fill:black;stroke:none;}#mermaid-svg-qVGg1Q5DryEhe4ua .loopText,#mermaid-svg-qVGg1Q5DryEhe4ua .loopText&gt;tspan{fill:black;stroke:none;}#mermaid-svg-qVGg1Q5DryEhe4ua .loopLine{stroke-width:2px;stroke-dasharray:2,2;stroke:hsl(259.6261682243, 59.7765363128%, 87.9019607843%);fill:hsl(259.6261682243, 59.7765363128%, 87.9019607843%);}#mermaid-svg-qVGg1Q5DryEhe4ua .note{stroke:#aaaa33;fill:#fff5ad;}#mermaid-svg-qVGg1Q5DryEhe4ua .noteText,#mermaid-svg-qVGg1Q5DryEhe4ua .noteText&gt;tspan{fill:black;stroke:none;}#mermaid-svg-qVGg1Q5DryEhe4ua .activation0{fill:#f4f4f4;stroke:#666;}#mermaid-svg-qVGg1Q5DryEhe4ua .activation1{fill:#f4f4f4;stroke:#666;}#mermaid-svg-qVGg1Q5DryEhe4ua .activation2{fill:#f4f4f4;stroke:#666;}#mermaid-svg-qVGg1Q5DryEhe4ua .actorPopupMenu{position:absolute;}#mermaid-svg-qVGg1Q5DryEhe4ua .actorPopupMenuPanel{position:absolute;fill:#ECECFF;box-shadow:0px 8px 16px 0px rgba(0,0,0,0.2);filter:drop-shadow(3px 5px 2px rgb(0 0 0 / 0.4));}#mermaid-svg-qVGg1Q5DryEhe4ua .actor-man line{stroke:hsl(259.6261682243, 59.7765363128%, 87.9019607843%);fill:#ECECFF;}#mermaid-svg-qVGg1Q5DryEhe4ua .actor-man circle,#mermaid-svg-qVGg1Q5DryEhe4ua line{stroke:hsl(259.6261682243, 59.7765363128%, 87.9019607843%);fill:#ECECFF;stroke-width:2px;}#mermaid-svg-qVGg1Q5DryEhe4ua :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style> 
+<g></g> 
+<defs> 
+<symbol id="computer" width="24" height="24"> 
+<path transform="scale(.5)" d="M2 2v13h20v-13h-20zm18 11h-16v-9h16v9zm-10.228 6l.466-1h3.524l.467 1h-4.457zm14.228 3h-24l2-6h2.104l-1.33 4h18.45l-1.297-4h2.073l2 6zm-5-10h-14v-7h14v7z"></path> 
+</symbol> 
+</defs> 
+<defs> 
+<symbol id="database" fill-rule="evenodd"> 
+<path transform="scale(.5)" d="M12.258.001l.256.004.255.005.253.008.251.01.249.012.247.015.246.016.242.019.241.02.239.023.236.024.233.027.231.028.229.031.225.032.223.034.22.036.217.038.214.04.211.041.208.043.205.045.201.046.198.048.194.05.191.051.187.053.183.054.18.056.175.057.172.059.168.06.163.061.16.063.155.064.15.066.074.033.073.033.071.034.07.034.069.035.068.035.067.035.066.035.064.036.064.036.062.036.06.036.06.037.058.037.058.037.055.038.055.038.053.038.052.038.051.039.05.039.048.039.047.039.045.04.044.04.043.04.041.04.04.041.039.041.037.041.036.041.034.041.033.042.032.042.03.042.029.042.027.042.026.043.024.043.023.043.021.043.02.043.018.044.017.043.015.044.013.044.012.044.011.045.009.044.007.045.006.045.004.045.002.045.001.045v17l-.001.045-.002.045-.004.045-.006.045-.007.045-.009.044-.011.045-.012.044-.013.044-.015.044-.017.043-.018.044-.02.043-.021.043-.023.043-.024.043-.026.043-.027.042-.029.042-.03.042-.032.042-.033.042-.034.041-.036.041-.037.041-.039.041-.04.041-.041.04-.043.04-.044.04-.045.04-.047.039-.048.039-.05.039-.051.039-.052.038-.053.038-.055.038-.055.038-.058.037-.058.037-.06.037-.06.036-.062.036-.064.036-.064.036-.066.035-.067.035-.068.035-.069.035-.07.034-.071.034-.073.033-.074.033-.15.066-.155.064-.16.063-.163.061-.168.06-.172.059-.175.057-.18.056-.183.054-.187.053-.191.051-.194.05-.198.048-.201.046-.205.045-.208.043-.211.041-.214.04-.217.038-.22.036-.223.034-.225.032-.229.031-.231.028-.233.027-.236.024-.239.023-.241.02-.242.019-.246.016-.247.015-.249.012-.251.01-.253.008-.255.005-.256.004-.258.001-.258-.001-.256-.004-.255-.005-.253-.008-.251-.01-.249-.012-.247-.015-.245-.016-.243-.019-.241-.02-.238-.023-.236-.024-.234-.027-.231-.028-.228-.031-.226-.032-.223-.034-.22-.036-.217-.038-.214-.04-.211-.041-.208-.043-.204-.045-.201-.046-.198-.048-.195-.05-.19-.051-.187-.053-.184-.054-.179-.056-.176-.057-.172-.059-.167-.06-.164-.061-.159-.063-.155-.064-.151-.066-.074-.033-.072-.033-.072-.034-.07-.034-.069-.035-.068-.035-.067-.035-.066-.035-.064-.036-.063-.036-.062-.036-.061-.036-.06-.037-.058-.037-.057-.037-.056-.038-.055-.038-.053-.038-.052-.038-.051-.039-.049-.039-.049-.039-.046-.039-.046-.04-.044-.04-.043-.04-.041-.04-.04-.041-.039-.041-.037-.041-.036-.041-.034-.041-.033-.042-.032-.042-.03-.042-.029-.042-.027-.042-.026-.043-.024-.043-.023-.043-.021-.043-.02-.043-.018-.044-.017-.043-.015-.044-.013-.044-.012-.044-.011-.045-.009-.044-.007-.045-.006-.045-.004-.045-.002-.045-.001-.045v-17l.001-.045.002-.045.004-.045.006-.045.007-.045.009-.044.011-.045.012-.044.013-.044.015-.044.017-.043.018-.044.02-.043.021-.043.023-.043.024-.043.026-.043.027-.042.029-.042.03-.042.032-.042.033-.042.034-.041.036-.041.037-.041.039-.041.04-.041.041-.04.043-.04.044-.04.046-.04.046-.039.049-.039.049-.039.051-.039.052-.038.053-.038.055-.038.056-.038.057-.037.058-.037.06-.037.061-.036.062-.036.063-.036.064-.036.066-.035.067-.035.068-.035.069-.035.07-.034.072-.034.072-.033.074-.033.151-.066.155-.064.159-.063.164-.061.167-.06.172-.059.176-.057.179-.056.184-.054.187-.053.19-.051.195-.05.198-.048.201-.046.204-.045.208-.043.211-.041.214-.04.217-.038.22-.036.223-.034.226-.032.228-.031.231-.028.234-.027.236-.024.238-.023.241-.02.243-.019.245-.016.247-.015.249-.012.251-.01.253-.008.255-.005.256-.004.258-.001.258.001zm-9.258 20.499v.01l.001.021.003.021.004.022.005.021.006.022.007.022.009.023.01.022.011.023.012.023.013.023.015.023.016.024.017.023.018.024.019.024.021.024.022.025.023.024.024.025.052.049.056.05.061.051.066.051.07.051.075.051.079.052.084.052.088.052.092.052.097.052.102.051.105.052.11.052.114.051.119.051.123.051.127.05.131.05.135.05.139.048.144.049.147.047.152.047.155.047.16.045.163.045.167.043.171.043.176.041.178.041.183.039.187.039.19.037.194.035.197.035.202.033.204.031.209.03.212.029.216.027.219.025.222.024.226.021.23.02.233.018.236.016.24.015.243.012.246.01.249.008.253.005.256.004.259.001.26-.001.257-.004.254-.005.25-.008.247-.011.244-.012.241-.014.237-.016.233-.018.231-.021.226-.021.224-.024.22-.026.216-.027.212-.028.21-.031.205-.031.202-.034.198-.034.194-.036.191-.037.187-.039.183-.04.179-.04.175-.042.172-.043.168-.044.163-.045.16-.046.155-.046.152-.047.148-.048.143-.049.139-.049.136-.05.131-.05.126-.05.123-.051.118-.052.114-.051.11-.052.106-.052.101-.052.096-.052.092-.052.088-.053.083-.051.079-.052.074-.052.07-.051.065-.051.06-.051.056-.05.051-.05.023-.024.023-.025.021-.024.02-.024.019-.024.018-.024.017-.024.015-.023.014-.024.013-.023.012-.023.01-.023.01-.022.008-.022.006-.022.006-.022.004-.022.004-.021.001-.021.001-.021v-4.127l-.077.055-.08.053-.083.054-.085.053-.087.052-.09.052-.093.051-.095.05-.097.05-.1.049-.102.049-.105.048-.106.047-.109.047-.111.046-.114.045-.115.045-.118.044-.12.043-.122.042-.124.042-.126.041-.128.04-.13.04-.132.038-.134.038-.135.037-.138.037-.139.035-.142.035-.143.034-.144.033-.147.032-.148.031-.15.03-.151.03-.153.029-.154.027-.156.027-.158.026-.159.025-.161.024-.162.023-.163.022-.165.021-.166.02-.167.019-.169.018-.169.017-.171.016-.173.015-.173.014-.175.013-.175.012-.177.011-.178.01-.179.008-.179.008-.181.006-.182.005-.182.004-.184.003-.184.002h-.37l-.184-.002-.184-.003-.182-.004-.182-.005-.181-.006-.179-.008-.179-.008-.178-.01-.176-.011-.176-.012-.175-.013-.173-.014-.172-.015-.171-.016-.17-.017-.169-.018-.167-.019-.166-.02-.165-.021-.163-.022-.162-.023-.161-.024-.159-.025-.157-.026-.156-.027-.155-.027-.153-.029-.151-.03-.15-.03-.148-.031-.146-.032-.145-.033-.143-.034-.141-.035-.14-.035-.137-.037-.136-.037-.134-.038-.132-.038-.13-.04-.128-.04-.126-.041-.124-.042-.122-.042-.12-.044-.117-.043-.116-.045-.113-.045-.112-.046-.109-.047-.106-.047-.105-.048-.102-.049-.1-.049-.097-.05-.095-.05-.093-.052-.09-.051-.087-.052-.085-.053-.083-.054-.08-.054-.077-.054v4.127zm0-5.654v.011l.001.021.003.021.004.021.005.022.006.022.007.022.009.022.01.022.011.023.012.023.013.023.015.024.016.023.017.024.018.024.019.024.021.024.022.024.023.025.024.024.052.05.056.05.061.05.066.051.07.051.075.052.079.051.084.052.088.052.092.052.097.052.102.052.105.052.11.051.114.051.119.052.123.05.127.051.131.05.135.049.139.049.144.048.147.048.152.047.155.046.16.045.163.045.167.044.171.042.176.042.178.04.183.04.187.038.19.037.194.036.197.034.202.033.204.032.209.03.212.028.216.027.219.025.222.024.226.022.23.02.233.018.236.016.24.014.243.012.246.01.249.008.253.006.256.003.259.001.26-.001.257-.003.254-.006.25-.008.247-.01.244-.012.241-.015.237-.016.233-.018.231-.02.226-.022.224-.024.22-.025.216-.027.212-.029.21-.03.205-.032.202-.033.198-.035.194-.036.191-.037.187-.039.183-.039.179-.041.175-.042.172-.043.168-.044.163-.045.16-.045.155-.047.152-.047.148-.048.143-.048.139-.05.136-.049.131-.05.126-.051.123-.051.118-.051.114-.052.11-.052.106-.052.101-.052.096-.052.092-.052.088-.052.083-.052.079-.052.074-.051.07-.052.065-.051.06-.05.056-.051.051-.049.023-.025.023-.024.021-.025.02-.024.019-.024.018-.024.017-.024.015-.023.014-.023.013-.024.012-.022.01-.023.01-.023.008-.022.006-.022.006-.022.004-.021.004-.022.001-.021.001-.021v-4.139l-.077.054-.08.054-.083.054-.085.052-.087.053-.09.051-.093.051-.095.051-.097.05-.1.049-.102.049-.105.048-.106.047-.109.047-.111.046-.114.045-.115.044-.118.044-.12.044-.122.042-.124.042-.126.041-.128.04-.13.039-.132.039-.134.038-.135.037-.138.036-.139.036-.142.035-.143.033-.144.033-.147.033-.148.031-.15.03-.151.03-.153.028-.154.028-.156.027-.158.026-.159.025-.161.024-.162.023-.163.022-.165.021-.166.02-.167.019-.169.018-.169.017-.171.016-.173.015-.173.014-.175.013-.175.012-.177.011-.178.009-.179.009-.179.007-.181.007-.182.005-.182.004-.184.003-.184.002h-.37l-.184-.002-.184-.003-.182-.004-.182-.005-.181-.007-.179-.007-.179-.009-.178-.009-.176-.011-.176-.012-.175-.013-.173-.014-.172-.015-.171-.016-.17-.017-.169-.018-.167-.019-.166-.02-.165-.021-.163-.022-.162-.023-.161-.024-.159-.025-.157-.026-.156-.027-.155-.028-.153-.028-.151-.03-.15-.03-.148-.031-.146-.033-.145-.033-.143-.033-.141-.035-.14-.036-.137-.036-.136-.037-.134-.038-.132-.039-.13-.039-.128-.04-.126-.041-.124-.042-.122-.043-.12-.043-.117-.044-.116-.044-.113-.046-.112-.046-.109-.046-.106-.047-.105-.048-.102-.049-.1-.049-.097-.05-.095-.051-.093-.051-.09-.051-.087-.053-.085-.052-.083-.054-.08-.054-.077-.054v4.139zm0-5.666v.011l.001.02.003.022.004.021.005.022.006.021.007.022.009.023.01.022.011.023.012.023.013.023.015.023.016.024.017.024.018.023.019.024.021.025.022.024.023.024.024.025.052.05.056.05.061.05.066.051.07.051.075.052.079.051.084.052.088.052.092.052.097.052.102.052.105.051.11.052.114.051.119.051.123.051.127.05.131.05.135.05.139.049.144.048.147.048.152.047.155.046.16.045.163.045.167.043.171.043.176.042.178.04.183.04.187.038.19.037.194.036.197.034.202.033.204.032.209.03.212.028.216.027.219.025.222.024.226.021.23.02.233.018.236.017.24.014.243.012.246.01.249.008.253.006.256.003.259.001.26-.001.257-.003.254-.006.25-.008.247-.01.244-.013.241-.014.237-.016.233-.018.231-.02.226-.022.224-.024.22-.025.216-.027.212-.029.21-.03.205-.032.202-.033.198-.035.194-.036.191-.037.187-.039.183-.039.179-.041.175-.042.172-.043.168-.044.163-.045.16-.045.155-.047.152-.047.148-.048.143-.049.139-.049.136-.049.131-.051.126-.05.123-.051.118-.052.114-.051.11-.052.106-.052.101-.052.096-.052.092-.052.088-.052.083-.052.079-.052.074-.052.07-.051.065-.051.06-.051.056-.05.051-.049.023-.025.023-.025.021-.024.02-.024.019-.024.018-.024.017-.024.015-.023.014-.024.013-.023.012-.023.01-.022.01-.023.008-.022.006-.022.006-.022.004-.022.004-.021.001-.021.001-.021v-4.153l-.077.054-.08.054-.083.053-.085.053-.087.053-.09.051-.093.051-.095.051-.097.05-.1.049-.102.048-.105.048-.106.048-.109.046-.111.046-.114.046-.115.044-.118.044-.12.043-.122.043-.124.042-.126.041-.128.04-.13.039-.132.039-.134.038-.135.037-.138.036-.139.036-.142.034-.143.034-.144.033-.147.032-.148.032-.15.03-.151.03-.153.028-.154.028-.156.027-.158.026-.159.024-.161.024-.162.023-.163.023-.165.021-.166.02-.167.019-.169.018-.169.017-.171.016-.173.015-.173.014-.175.013-.175.012-.177.01-.178.01-.179.009-.179.007-.181.006-.182.006-.182.004-.184.003-.184.001-.185.001-.185-.001-.184-.001-.184-.003-.182-.004-.182-.006-.181-.006-.179-.007-.179-.009-.178-.01-.176-.01-.176-.012-.175-.013-.173-.014-.172-.015-.171-.016-.17-.017-.169-.018-.167-.019-.166-.02-.165-.021-.163-.023-.162-.023-.161-.024-.159-.024-.157-.026-.156-.027-.155-.028-.153-.028-.151-.03-.15-.03-.148-.032-.146-.032-.145-.033-.143-.034-.141-.034-.14-.036-.137-.036-.136-.037-.134-.038-.132-.039-.13-.039-.128-.041-.126-.041-.124-.041-.122-.043-.12-.043-.117-.044-.116-.044-.113-.046-.112-.046-.109-.046-.106-.048-.105-.048-.102-.048-.1-.05-.097-.049-.095-.051-.093-.051-.09-.052-.087-.052-.085-.053-.083-.053-.08-.054-.077-.054v4.153zm8.74-8.179l-.257.004-.254.005-.25.008-.247.011-.244.012-.241.014-.237.016-.233.018-.231.021-.226.022-.224.023-.22.026-.216.027-.212.028-.21.031-.205.032-.202.033-.198.034-.194.036-.191.038-.187.038-.183.04-.179.041-.175.042-.172.043-.168.043-.163.045-.16.046-.155.046-.152.048-.148.048-.143.048-.139.049-.136.05-.131.05-.126.051-.123.051-.118.051-.114.052-.11.052-.106.052-.101.052-.096.052-.092.052-.088.052-.083.052-.079.052-.074.051-.07.052-.065.051-.06.05-.056.05-.051.05-.023.025-.023.024-.021.024-.02.025-.019.024-.018.024-.017.023-.015.024-.014.023-.013.023-.012.023-.01.023-.01.022-.008.022-.006.023-.006.021-.004.022-.004.021-.001.021-.001.021.001.021.001.021.004.021.004.022.006.021.006.023.008.022.01.022.01.023.012.023.013.023.014.023.015.024.017.023.018.024.019.024.02.025.021.024.023.024.023.025.051.05.056.05.06.05.065.051.07.052.074.051.079.052.083.052.088.052.092.052.096.052.101.052.106.052.11.052.114.052.118.051.123.051.126.051.131.05.136.05.139.049.143.048.148.048.152.048.155.046.16.046.163.045.168.043.172.043.175.042.179.041.183.04.187.038.191.038.194.036.198.034.202.033.205.032.21.031.212.028.216.027.22.026.224.023.226.022.231.021.233.018.237.016.241.014.244.012.247.011.25.008.254.005.257.004.26.001.26-.001.257-.004.254-.005.25-.008.247-.011.244-.012.241-.014.237-.016.233-.018.231-.021.226-.022.224-.023.22-.026.216-.027.212-.028.21-.031.205-.032.202-.033.198-.034.194-.036.191-.038.187-.038.183-.04.179-.041.175-.042.172-.043.168-.043.163-.045.16-.046.155-.046.152-.048.148-.048.143-.048.139-.049.136-.05.131-.05.126-.051.123-.051.118-.051.114-.052.11-.052.106-.052.101-.052.096-.052.092-.052.088-.052.083-.052.079-.052.074-.051.07-.052.065-.051.06-.05.056-.05.051-.05.023-.025.023-.024.021-.024.02-.025.019-.024.018-.024.017-.023.015-.024.014-.023.013-.023.012-.023.01-.023.01-.022.008-.022.006-.023.006-.021.004-.022.004-.021.001-.021.001-.021-.001-.021-.001-.021-.004-.021-.004-.022-.006-.021-.006-.023-.008-.022-.01-.022-.01-.023-.012-.023-.013-.023-.014-.023-.015-.024-.017-.023-.018-.024-.019-.024-.02-.025-.021-.024-.023-.024-.023-.025-.051-.05-.056-.05-.06-.05-.065-.051-.07-.052-.074-.051-.079-.052-.083-.052-.088-.052-.092-.052-.096-.052-.101-.052-.106-.052-.11-.052-.114-.052-.118-.051-.123-.051-.126-.051-.131-.05-.136-.05-.139-.049-.143-.048-.148-.048-.152-.048-.155-.046-.16-.046-.163-.045-.168-.043-.172-.043-.175-.042-.179-.041-.183-.04-.187-.038-.191-.038-.194-.036-.198-.034-.202-.033-.205-.032-.21-.031-.212-.028-.216-.027-.22-.026-.224-.023-.226-.022-.231-.021-.233-.018-.237-.016-.241-.014-.244-.012-.247-.011-.25-.008-.254-.005-.257-.004-.26-.001-.26.001z"></path> 
+</symbol> 
+</defs> 
+<defs> 
+<symbol id="clock" width="24" height="24"> 
+<path transform="scale(.5)" d="M12 2c5.514 0 10 4.486 10 10s-4.486 10-10 10-10-4.486-10-10 4.486-10 10-10zm0-2c-6.627 0-12 5.373-12 12s5.373 12 12 12 12-5.373 12-12-5.373-12-12-12zm5.848 12.459c.202.038.202.333.001.372-1.907.361-6.045 1.111-6.547 1.111-.719 0-1.301-.582-1.301-1.301 0-.512.77-5.447 1.125-7.445.034-.192.312-.181.343.014l.985 6.238 5.394 1.011z"></path> 
+</symbol> 
+</defs> 
+<g> 
+<line id="actor12" x1="75" y1="5" x2="75" y2="518" class="200" stroke-width="0.5px" stroke="#999"></line> 
+<g id="root-12"> 
+<rect x="0" y="0" fill="#eaeaea" stroke="#666" width="150" height="65" rx="3" ry="3" class="actor"></rect> 
+<text x="75" y="32.5" style="text-anchor: middle; font-weight: 400; font-family: &quot;Open-Sans&quot;, &quot;sans-serif&quot;;" dominant-baseline="central" alignment-baseline="central" class="actor"> 
+<tspan x="75" dy="0">
+张三 
+</tspan> 
+</text> 
+</g> 
+</g> 
+<g> 
+<line id="actor13" x1="322" y1="5" x2="322" y2="518" class="200" stroke-width="0.5px" stroke="#999"></line> 
+<g id="root-13"> 
+<rect x="247" y="0" fill="#eaeaea" stroke="#666" width="150" height="65" rx="3" ry="3" class="actor"></rect> 
+<text x="322" y="32.5" style="text-anchor: middle; font-weight: 400; font-family: &quot;Open-Sans&quot;, &quot;sans-serif&quot;;" dominant-baseline="central" alignment-baseline="central" class="actor"> 
+<tspan x="322" dy="0">
+李四 
+</tspan> 
+</text> 
+</g> 
+</g> 
+<g> 
+<line id="actor14" x1="552" y1="5" x2="552" y2="518" class="200" stroke-width="0.5px" stroke="#999"></line> 
+<g id="root-14"> 
+<rect x="477" y="0" fill="#eaeaea" stroke="#666" width="150" height="65" rx="3" ry="3" class="actor"></rect> 
+<text x="552" y="32.5" style="text-anchor: middle; font-weight: 400; font-family: &quot;Open-Sans&quot;, &quot;sans-serif&quot;;" dominant-baseline="central" alignment-baseline="central" class="actor"> 
+<tspan x="552" dy="0">
+王五 
+</tspan> 
+</text> 
+</g> 
+</g> 
+<defs> 
+<marker id="arrowhead" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto"> 
+<path d="M 0 0 L 10 5 L 0 10 z"></path> 
+</marker> 
+</defs> 
+<defs> 
+<marker id="crosshead" markerWidth="15" markerHeight="8" orient="auto" refX="16" refY="4"> 
+<path fill="black" stroke="#000000" style="stroke-dasharray: 0px, 0px;" stroke-width="1px" d="M 9,2 V 6 L16,4 Z"></path> 
+<path fill="none" stroke="#000000" style="stroke-dasharray: 0px, 0px;" stroke-width="1px" d="M 0,1 L 6,7 M 6,1 L 0,7"></path> 
+</marker> 
+</defs> 
+<defs> 
+<marker id="filled-head" refX="18" refY="7" markerWidth="20" markerHeight="28" orient="auto"> 
+<path d="M 18,7 L9,13 L14,7 L9,1 Z"></path> 
+</marker> 
+</defs> 
+<defs> 
+<marker id="sequencenumber" refX="15" refY="15" markerWidth="60" markerHeight="40" orient="auto"> 
+<circle cx="15" cy="15" r="6"></circle> 
+</marker> 
+</defs> 
+<text x="199" y="80" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" style="font-family: &quot;trebuchet ms&quot;, verdana, arial, sans-serif; font-weight: 400;" class="messageText" dy="1em">
+你好！李四, 最近怎么样? 
+</text> 
+<line x1="75" y1="121" x2="322" y2="121" class="messageLine0" stroke-width="2" stroke="none" style="fill: none;" marker-end="url(#arrowhead)"></line> 
+<text x="437" y="136" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" style="font-family: &quot;trebuchet ms&quot;, verdana, arial, sans-serif; font-weight: 400;" class="messageText" dy="1em">
+你最近怎么样，王五？ 
+</text> 
+<line x1="322" y1="177" x2="552" y2="177" style="stroke-dasharray: 3px, 3px; fill: none;" class="messageLine1" stroke-width="2" stroke="none" marker-end="url(#arrowhead)"></line> 
+<text x="199" y="192" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" style="font-family: &quot;trebuchet ms&quot;, verdana, arial, sans-serif; font-weight: 400;" class="messageText" dy="1em">
+我很好，谢谢! 
+</text> 
+<line x1="322" y1="233" x2="75" y2="233" style="stroke-dasharray: 3px, 3px; fill: none;" class="messageLine1" stroke-width="2" stroke="none" marker-end="url(#crosshead)"></line> 
+<text x="437" y="248" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" style="font-family: &quot;trebuchet ms&quot;, verdana, arial, sans-serif; font-weight: 400;" class="messageText" dy="1em">
+我很好，谢谢! 
+</text> 
+<line x1="322" y1="289" x2="552" y2="289" class="messageLine0" stroke-width="2" stroke="none" style="fill: none;" marker-end="url(#crosshead)"></line> 
+<g> 
+<rect x="577" y="299" fill="#EDF2AE" stroke="#666" width="239" height="67" rx="0" ry="0" class="note"></rect> 
+<text x="697" y="304" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" style="font-family: &quot;trebuchet ms&quot;, verdana, arial, sans-serif; font-weight: 400;" class="noteText" dy="1em"> 
+<tspan x="697">
+李四想了很长时间, 文字太长了 
+</tspan> 
+</text> 
+<text x="697" y="327" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" style="font-family: &quot;trebuchet ms&quot;, verdana, arial, sans-serif; font-weight: 400;" class="noteText" dy="1em"> 
+<tspan x="697">
+不适合放在一行. 
+</tspan> 
+</text> 
+</g> 
+<text x="199" y="381" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" style="font-family: &quot;trebuchet ms&quot;, verdana, arial, sans-serif; font-weight: 400;" class="messageText" dy="1em">
+打量着王五... 
+</text> 
+<line x1="322" y1="422" x2="75" y2="422" style="stroke-dasharray: 3px, 3px; fill: none;" class="messageLine1" stroke-width="2" stroke="none" marker-end="url(#arrowhead)"></line> 
+<text x="314" y="437" text-anchor="middle" dominant-baseline="middle" alignment-baseline="middle" style="font-family: &quot;trebuchet ms&quot;, verdana, arial, sans-serif; font-weight: 400;" class="messageText" dy="1em">
+很好... 王五, 你怎么样? 
+</text> 
+<line x1="75" y1="478" x2="552" y2="478" class="messageLine0" stroke-width="2" stroke="none" style="fill: none;" marker-end="url(#arrowhead)"></line> 
+<g> 
+<rect x="0" y="498" fill="#eaeaea" stroke="#666" width="150" height="65" rx="3" ry="3" class="actor"></rect> 
+<text x="75" y="530.5" style="text-anchor: middle; font-weight: 400; font-family: &quot;Open-Sans&quot;, &quot;sans-serif&quot;;" dominant-baseline="central" alignment-baseline="central" class="actor"> 
+<tspan x="75" dy="0">
+张三 
+</tspan> 
+</text> 
+</g> 
+<g> 
+<rect x="247" y="498" fill="#eaeaea" stroke="#666" width="150" height="65" rx="3" ry="3" class="actor"></rect> 
+<text x="322" y="530.5" style="text-anchor: middle; font-weight: 400; font-family: &quot;Open-Sans&quot;, &quot;sans-serif&quot;;" dominant-baseline="central" alignment-baseline="central" class="actor"> 
+<tspan x="322" dy="0">
+李四 
+</tspan> 
+</text> 
+</g> 
+<g> 
+<rect x="477" y="498" fill="#eaeaea" stroke="#666" width="150" height="65" rx="3" ry="3" class="actor"></rect> 
+<text x="552" y="530.5" style="text-anchor: middle; font-weight: 400; font-family: &quot;Open-Sans&quot;, &quot;sans-serif&quot;;" dominant-baseline="central" alignment-baseline="central" class="actor"> 
+<tspan x="552" dy="0">
+王五 
+</tspan> 
+</text> 
+</g> 
+</svg> 
+</div> 
+<p>这将产生一个流程图。:</p> 
+<div class="mermaid"> 
+<svg id="mermaid-svg-5T0r5F6q5T0uUxYt" width="404.20001220703125" xmlns="http://www.w3.org/2000/svg" height="158" viewBox="0 0 404.20001220703125 158" class="mermaid-svg"> 
+<style>#mermaid-svg-5T0r5F6q5T0uUxYt {font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;fill:#333;}#mermaid-svg-5T0r5F6q5T0uUxYt .error-icon{fill:#552222;}#mermaid-svg-5T0r5F6q5T0uUxYt .error-text{fill:#552222;stroke:#552222;}#mermaid-svg-5T0r5F6q5T0uUxYt .edge-thickness-normal{stroke-width:2px;}#mermaid-svg-5T0r5F6q5T0uUxYt .edge-thickness-thick{stroke-width:3.5px;}#mermaid-svg-5T0r5F6q5T0uUxYt .edge-pattern-solid{stroke-dasharray:0;}#mermaid-svg-5T0r5F6q5T0uUxYt .edge-pattern-dashed{stroke-dasharray:3;}#mermaid-svg-5T0r5F6q5T0uUxYt .edge-pattern-dotted{stroke-dasharray:2;}#mermaid-svg-5T0r5F6q5T0uUxYt .marker{fill:#333333;stroke:#333333;}#mermaid-svg-5T0r5F6q5T0uUxYt .marker.cross{stroke:#333333;}#mermaid-svg-5T0r5F6q5T0uUxYt svg{font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:16px;}#mermaid-svg-5T0r5F6q5T0uUxYt .label{font-family:"trebuchet ms",verdana,arial,sans-serif;color:#333;}#mermaid-svg-5T0r5F6q5T0uUxYt .cluster-label text{fill:#333;}#mermaid-svg-5T0r5F6q5T0uUxYt .cluster-label span{color:#333;}#mermaid-svg-5T0r5F6q5T0uUxYt .label text,#mermaid-svg-5T0r5F6q5T0uUxYt span{fill:#333;color:#333;}#mermaid-svg-5T0r5F6q5T0uUxYt .node rect,#mermaid-svg-5T0r5F6q5T0uUxYt .node circle,#mermaid-svg-5T0r5F6q5T0uUxYt .node ellipse,#mermaid-svg-5T0r5F6q5T0uUxYt .node polygon,#mermaid-svg-5T0r5F6q5T0uUxYt .node path{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#mermaid-svg-5T0r5F6q5T0uUxYt .node .label{text-align:center;}#mermaid-svg-5T0r5F6q5T0uUxYt .node.clickable{cursor:pointer;}#mermaid-svg-5T0r5F6q5T0uUxYt .arrowheadPath{fill:#333333;}#mermaid-svg-5T0r5F6q5T0uUxYt .edgePath .path{stroke:#333333;stroke-width:2.0px;}#mermaid-svg-5T0r5F6q5T0uUxYt .flowchart-link{stroke:#333333;fill:none;}#mermaid-svg-5T0r5F6q5T0uUxYt .edgeLabel{background-color:#e8e8e8;text-align:center;}#mermaid-svg-5T0r5F6q5T0uUxYt .edgeLabel rect{opacity:0.5;background-color:#e8e8e8;fill:#e8e8e8;}#mermaid-svg-5T0r5F6q5T0uUxYt .cluster rect{fill:#ffffde;stroke:#aaaa33;stroke-width:1px;}#mermaid-svg-5T0r5F6q5T0uUxYt .cluster text{fill:#333;}#mermaid-svg-5T0r5F6q5T0uUxYt .cluster span{color:#333;}#mermaid-svg-5T0r5F6q5T0uUxYt div.mermaidTooltip{position:absolute;text-align:center;max-width:200px;padding:2px;font-family:"trebuchet ms",verdana,arial,sans-serif;font-size:12px;background:hsl(80, 100%, 96.2745098039%);border:1px solid #aaaa33;border-radius:2px;pointer-events:none;z-index:100;}#mermaid-svg-5T0r5F6q5T0uUxYt :root{--mermaid-font-family:"trebuchet ms",verdana,arial,sans-serif;}</style> 
+<g> 
+<g class="output"> 
+<g class="clusters"></g> 
+<g class="edgePaths"> 
+<g class="edgePath LS-A LE-B" style="opacity: 1;" id="L-A-B"> 
+<path class="path" d="M76,57.239999999999995L82.83333333333333,52.86666666666667C89.66666666666667,48.49333333333333,103.33333333333333,39.74666666666666,121.5,35.373333333333335C139.66666666666666,31,162.33333333333334,31,173.66666666666666,31L185,31" marker-end="url(#arrowhead87)" style="fill:none"></path> 
+<defs> 
+<marker id="arrowhead87" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="8" markerHeight="6" orient="auto"> 
+<path d="M 0 0 L 10 5 L 0 10 z" class="arrowheadPath" style="stroke-width: 1px; stroke-dasharray: 1px, 0px;"></path> 
+</marker> 
+</defs> 
+</g> 
+<g class="edgePath LS-A LE-C" style="opacity: 1;" id="L-A-C"> 
+<path class="path" d="M76,100.76L82.83333333333333,105.13333333333333C89.66666666666667,109.50666666666666,103.33333333333333,118.25333333333333,117,122.62666666666667C130.66666666666666,127,144.33333333333334,127,151.16666666666666,127L158,127" marker-end="url(#arrowhead88)" style="fill:none"></path> 
+<defs> 
+<marker id="arrowhead88" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="8" markerHeight="6" orient="auto"> 
+<path d="M 0 0 L 10 5 L 0 10 z" class="arrowheadPath" style="stroke-width: 1px; stroke-dasharray: 1px, 0px;"></path> 
+</marker> 
+</defs> 
+</g> 
+<g class="edgePath LS-B LE-D" style="opacity: 1;" id="L-B-D"> 
+<path class="path" d="M231,31L239.66666666666666,31C248.33333333333334,31,265.6666666666667,31,281.59614298289085,36.07052393808893C297.5256192991151,41.14104787617786,312.0512385982302,51.28209575235572,319.31404824778775,56.35261969044465L326.5768578973453,61.42314362853358" marker-end="url(#arrowhead89)" style="fill:none"></path> 
+<defs> 
+<marker id="arrowhead89" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="8" markerHeight="6" orient="auto"> 
+<path d="M 0 0 L 10 5 L 0 10 z" class="arrowheadPath" style="stroke-width: 1px; stroke-dasharray: 1px, 0px;"></path> 
+</marker> 
+</defs> 
+</g> 
+<g class="edgePath LS-C LE-D" style="opacity: 1;" id="L-C-D"> 
+<path class="path" d="M258,127L262.1666666666667,127C266.3333333333333,127,274.6666666666667,127,286.0961426827536,122.09614293706674C297.52561869884056,117.1922858741335,312.05123739768106,107.38457174826699,319.3140467471013,102.48071468533374L326.57685609652157,97.57685762240048" marker-end="url(#arrowhead90)" style="fill:none"></path> 
+<defs> 
+<marker id="arrowhead90" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="8" markerHeight="6" orient="auto"> 
+<path d="M 0 0 L 10 5 L 0 10 z" class="arrowheadPath" style="stroke-width: 1px; stroke-dasharray: 1px, 0px;"></path> 
+</marker> 
+</defs> 
+</g> 
+</g> 
+<g class="edgeLabels"> 
+<g class="edgeLabel" style="opacity: 1;" transform="translate(117,31)"> 
+<g transform="translate(-16,-13)" class="label"> 
+<rect rx="0" ry="0" width="32" height="26"></rect> 
+<foreignObject width="32" height="26"> 
+<div style="display: inline-block; white-space: nowrap;"> 
+<span id="L-L-A-B" class="edgeLabel L-LS-A' L-LE-B">链接</span> 
+</div> 
+</foreignObject> 
+</g> 
+</g> 
+<g class="edgeLabel" style="opacity: 1;" transform=""> 
+<g transform="translate(0,0)" class="label"> 
+<rect rx="0" ry="0" width="0" height="0"></rect> 
+<foreignObject width="0" height="0"> 
+<div style="display: inline-block; white-space: nowrap;"> 
+<span id="L-L-A-C" class="edgeLabel L-LS-A' L-LE-C"></span> 
+</div> 
+</foreignObject> 
+</g> 
+</g> 
+<g class="edgeLabel" style="opacity: 1;" transform=""> 
+<g transform="translate(0,0)" class="label"> 
+<rect rx="0" ry="0" width="0" height="0"></rect> 
+<foreignObject width="0" height="0"> 
+<div style="display: inline-block; white-space: nowrap;"> 
+<span id="L-L-B-D" class="edgeLabel L-LS-B' L-LE-D"></span> 
+</div> 
+</foreignObject> 
+</g> 
+</g> 
+<g class="edgeLabel" style="opacity: 1;" transform=""> 
+<g transform="translate(0,0)" class="label"> 
+<rect rx="0" ry="0" width="0" height="0"></rect> 
+<foreignObject width="0" height="0"> 
+<div style="display: inline-block; white-space: nowrap;"> 
+<span id="L-L-C-D" class="edgeLabel L-LS-C' L-LE-D"></span> 
+</div> 
+</foreignObject> 
+</g> 
+</g> 
+</g> 
+<g class="nodes"> 
+<g class="node default" style="opacity: 1;" id="flowchart-A-72" transform="translate(42,79)"> 
+<rect rx="0" ry="0" x="-34" y="-23" width="68" height="46" class="label-container"></rect> 
+<g class="label" transform="translate(0,0)"> 
+<g transform="translate(-24,-13)"> 
+<foreignObject width="48" height="26"> 
+<div style="display: inline-block; white-space: nowrap;">
+长方形 
+</div> 
+</foreignObject> 
+</g> 
+</g> 
+</g> 
+<g class="node default" style="opacity: 1;" id="flowchart-B-73" transform="translate(208,31)"> 
+<circle x="-18" y="-23" r="23" class="label-container"></circle> 
+<g class="label" transform="translate(0,0)"> 
+<g transform="translate(-8,-13)"> 
+<foreignObject width="16" height="26"> 
+<div style="display: inline-block; white-space: nowrap;">
+圆 
+</div> 
+</foreignObject> 
+</g> 
+</g> 
+</g> 
+<g class="node default" style="opacity: 1;" id="flowchart-C-75" transform="translate(208,127)"> 
+<rect rx="5" ry="5" x="-50" y="-23" width="100" height="46" class="label-container"></rect> 
+<g class="label" transform="translate(0,0)"> 
+<g transform="translate(-40,-13)"> 
+<foreignObject width="80" height="26"> 
+<div style="display: inline-block; white-space: nowrap;">
+圆角长方形 
+</div> 
+</foreignObject> 
+</g> 
+</g> 
+</g> 
+<g class="node default" style="opacity: 1;" id="flowchart-D-77" transform="translate(352.0999984741211,79)"> 
+<polygon points="44.1,0 88.2,-44.1 44.1,-88.2 0,-44.1" transform="translate(-44.1,44.1)" class="label-container"></polygon> 
+<g class="label" transform="translate(0,0)"> 
+<g transform="translate(-16,-13)"> 
+<foreignObject width="32" height="26"> 
+<div style="display: inline-block; white-space: nowrap;">
+菱形 
+</div> 
+</foreignObject> 
+</g> 
+</g> 
+</g> 
+</g> 
+</g> 
+</g> 
+</svg> 
+</div> 
+<ul><li>关于 <strong>Mermaid</strong> 语法，参考 <a href="https://mermaidjs.github.io/" rel="nofollow">这儿</a>,</li></ul> 
+<h3><a name="t18"></a><a id="FLowchart_191"></a>FLowchart流程图</h3> 
+<p>我们依旧会支持flowchart的流程图：</p> 
+<div class="mermaid sequence-diagram flow-chart"> 
+<svg height="376.0000033378601" version="1.1" width="136" xmlns="http://www.w3.org/2000/svg" style="overflow: hidden; position: relative;" viewBox="0 0 136 376.0000033378601" preserveAspectRatio="xMidYMid meet"> 
+<desc>
+Created with Raphaël 2.3.0 
+</desc> 
+<defs> 
+<path stroke-linecap="round" d="M5,0 0,2.5 5,5z" id="raphael-marker-block"></path> 
+<marker id="raphael-marker-endblock33-objsdxnc" markerHeight="3" markerWidth="3" orient="auto" refX="1.5" refY="1.5"> 
+<use transform="rotate(180 1.5 1.5) scale(0.6,0.6)" stroke-width="1.6667" fill="black" stroke="none"></use> 
+</marker> 
+<marker id="raphael-marker-endblock33-obj5vgi4" markerHeight="3" markerWidth="3" orient="auto" refX="1.5" refY="1.5"> 
+<use transform="rotate(180 1.5 1.5) scale(0.6,0.6)" stroke-width="1.6667" fill="black" stroke="none"></use> 
+</marker> 
+<marker id="raphael-marker-endblock33-obj544g3" markerHeight="3" markerWidth="3" orient="auto" refX="1.5" refY="1.5"> 
+<use transform="rotate(180 1.5 1.5) scale(0.6,0.6)" stroke-width="1.6667" fill="black" stroke="none"></use> 
+</marker> 
+<marker id="raphael-marker-endblock33-objqljs6" markerHeight="3" markerWidth="3" orient="auto" refX="1.5" refY="1.5"> 
+<use transform="rotate(180 1.5 1.5) scale(0.6,0.6)" stroke-width="1.6667" fill="black" stroke="none"></use> 
+</marker> 
+</defs> 
+<rect x="0" y="0" width="48" height="41.33333396911621" rx="20" ry="20" fill="#ffffff" stroke="#000000" style="" stroke-width="1" class="flowchart" id="st" transform="matrix(1,0,0,1,32,12.3333)"></rect> 
+<text style="text-anchor: start; font-family: sans-serif; font-size: 14px; font-weight: normal;" x="10" y="20.666666984558105" text-anchor="start" font-size="14px" stroke="none" fill="#000000" id="stt" class="flowchartt" transform="matrix(1,0,0,1,32,12.3333)" stroke-width="1"> 
+<tspan dy="6.0000011920928955">
+开始 
+</tspan> 
+</text> 
+<rect x="0" y="0" width="76" height="41.33333396911621" rx="0" ry="0" fill="#ffffff" stroke="#000000" style="" stroke-width="1" class="flowchart" id="op" transform="matrix(1,0,0,1,18,116)"></rect> 
+<text style="text-anchor: start; font-family: sans-serif; font-size: 14px; font-weight: normal;" x="10" y="20.666666984558105" text-anchor="start" font-size="14px" stroke="none" fill="#000000" id="opt" class="flowchartt" transform="matrix(1,0,0,1,18,116)" stroke-width="1"> 
+<tspan dy="6.0000011920928955">
+我的操作 
+</tspan> 
+</text> 
+<path style="font-family: sans-serif; font-weight: normal;" fill="#ffffff" stroke="#000000" d="M27,15.500000238418579L0,31.000000476837158L54,62.000000953674316L108,31.000000476837158L54,0L0,31.000000476837158" stroke-width="1" id="cond" class="flowchart" transform="matrix(1,0,0,1,2,209.3333)"></path> 
+<text style="text-anchor: start; font-family: sans-serif; font-size: 14px; font-weight: normal;" x="32" y="31.000000476837158" text-anchor="start" font-size="14px" stroke="none" fill="#000000" id="condt" class="flowchartt" transform="matrix(1,0,0,1,2,209.3333)" stroke-width="1"> 
+<tspan dy="6.000000476837158">
+确认？ 
+</tspan> 
+</text> 
+<rect x="0" y="0" width="48" height="41.33333396911621" rx="20" ry="20" fill="#ffffff" stroke="#000000" style="" stroke-width="1" class="flowchart" id="e" transform="matrix(1,0,0,1,32,333.6667)"></rect> 
+<text style="text-anchor: start; font-family: sans-serif; font-size: 14px; font-weight: normal;" x="10" y="20.666666984558105" text-anchor="start" font-size="14px" stroke="none" fill="#000000" id="et" class="flowchartt" transform="matrix(1,0,0,1,32,333.6667)" stroke-width="1"> 
+<tspan dy="6.0000011920928955">
+结束 
+</tspan> 
+</text> 
+<path style="font-family: sans-serif; font-weight: normal;" fill="none" stroke="#000000" d="M56,53.666667461395264C56,53.666667461395264,56,104.97074315119744,56,114.4900540702037" stroke-width="1" marker-end="url(#raphael-marker-endblock33-objsdxnc)"></path> 
+<path style="font-family: sans-serif; font-weight: normal;" fill="none" stroke="#000000" d="M56,157.33333492279053C56,157.33333492279053,56,199.30721187591553,56,207.83315563201904" stroke-width="1" marker-end="url(#raphael-marker-endblock33-obj5vgi4)"></path> 
+<path style="font-family: sans-serif; font-weight: normal;" fill="none" stroke="#000000" d="M56,271.33333587646484C56,271.33333587646484,56,322.637411566267,56,332.1567224852733" stroke-width="1" marker-end="url(#raphael-marker-endblock33-obj544g3)"></path> 
+<text style="text-anchor: start; font-family: sans-serif; font-size: 14px; font-weight: normal;" x="61" y="281.33333587646484" text-anchor="start" font-size="14px" stroke="none" fill="#000000" stroke-width="1"> 
+<tspan dy="5.000002861022949">
+yes 
+</tspan> 
+</text> 
+<path style="font-family: sans-serif; font-weight: normal;" fill="none" stroke="#000000" d="M110,240.33333539962769C110,240.33333539962769,135,240.33333539962769,135,240.33333539962769C135,240.33333539962769,135,91.00000095367432,135,91.00000095367432C135,91.00000095367432,56,91.00000095367432,56,91.00000095367432C56,91.00000095367432,56,109.08741188049316,56,114.49243897385895" stroke-width="1" marker-end="url(#raphael-marker-endblock33-objqljs6)"></path> 
+<text style="text-anchor: start; font-family: sans-serif; font-size: 14px; font-weight: normal;" x="115" y="230.33333539962769" text-anchor="start" font-size="14px" stroke="none" fill="#000000" stroke-width="1"> 
+<tspan dy="5.000002384185791">
+no 
+</tspan> 
+</text> 
+</svg> 
+</div> 
+<ul><li>关于 <strong>Flowchart流程图</strong> 语法，参考 <a href="http://adrai.github.io/flowchart.js/" rel="nofollow">这儿</a>.</li></ul> 
+<h3><a name="t19"></a><a id="_208"></a>导出与导入</h3> 
+<h4><a name="t20"></a><a id="_210"></a>导出</h4> 
+<p>如果你想尝试使用此编辑器, 你可以在此篇文章任意编辑。当你完成了一篇文章的写作, 在上方工具栏找到 <strong>文章导出</strong> ，生成一个.md文件或者.html文件进行本地保存。</p> 
+<h4><a name="t21"></a><a id="_213"></a>导入</h4> 
+<p>如果你想加载一篇你写过的.md文件，在上方工具栏可以选择导入功能进行对应扩展名的文件导入，<br> 继续你的创作。</p> 
+<hr class="footnotes-sep"> 
+<section class="footnotes"> 
+<ol class="footnotes-list"><li id="fn1" class="footnote-item"><p><a href="https://mermaidjs.github.io/" rel="nofollow">mermaid语法说明</a> <a href="#fnref1" rel="nofollow" class="footnote-backref" target="_self">↩︎</a></p> </li><li id="fn2" class="footnote-item"><p>注脚的解释 <a href="#fnref2" rel="nofollow" class="footnote-backref" target="_self">↩︎</a></p> </li></ol> 
+</section>
+</div>
