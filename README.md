@@ -9,6 +9,8 @@
 
 `csdn2md` 是一个用于***批量下载 CSDN 文章和专栏并将其转换为 Markdown 文件***的工具。支持**油猴脚本**和 Node.js 两种版本。
 
+![界面](./assets/image.png)
+
 下载了 Markdown 文件后，如果希望获得其他格式的文件，可以使用 [Pandoc](https://pandoc.org/) 进行转换，或者用 [Typora](https://typora.io/) 直接打开后另存为其他格式（pdf、docx 等）。
 
 > 动机：
@@ -28,7 +30,7 @@
 
 本仓库测试时间为 2025.1.12 ，请注意 CSDN 页面结构随时可能变动，导致脚本无法正常使用。
 
-![image-20250112190109165](./assets/image-20250112190109165.png)
+
 
 ## 功能特性
 

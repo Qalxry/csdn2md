@@ -153,9 +153,9 @@
         });
     }
 
-    addOption("parallelDownload", "专栏并行下载模式（下载乱序，但可通过下面的加入序号排序）", false);
-    addOption("fastDownload", "专栏高速下载模式（有代码块语言无法识别等问题，能接受就开）", false);
-    addOption("addSerialNumber", "专栏文章文件加入序号前缀", false);
+    addOption("parallelDownload", "批量并行下载模式（下载乱序，但可以添加前缀弥补）", false);
+    addOption("fastDownload", "批量高速下载模式（有代码块语言无法识别等问题，能接受就开）", false);
+    addOption("addSerialNumber", "批量文章文件加入序号前缀", false);
     addOption("zipCategories", "下载为压缩包", true, {false: [{id: "saveWebImages", value: false}]});
     addOption("addArticleInfoInYaml", "添加文章元信息（以YAML元信息格式）", false);
     addOption("addArticleTitleToMarkdown", "添加文章标题（以一级标题形式）", true);
