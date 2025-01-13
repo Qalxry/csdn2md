@@ -1,21 +1,61 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      1.0.5
+// @version      1.1.0
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
 // @icon         https://g.csdnimg.cn/static/logo/favicon32.ico
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_xmlhttpRequest
 // @run-at       document-end
 // @license      PolyForm Strict License 1.0.0  https://polyformproject.org/licenses/strict/1.0.0/
 // @supportURL   https://github.com/Qalxry/csdn2md
-// @require https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js
+// @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js
 // ==/UserScript==
 
 (function () {
     "use strict";
+
+    /**
+     * 显示悬浮提示框。
+     * @param {string} text - 提示框的文本内容。
+     */
+    function showFloatTip(text, timeout = 0) {
+        if (document.getElementById("myInfoFloatTip")) {
+            document.getElementById("myInfoFloatTip").remove();
+        }
+        const floatTip = document.createElement("div");
+        floatTip.style.position = "fixed";
+        floatTip.style.top = "40%";
+        floatTip.style.left = "50%";
+        floatTip.style.transform = "translateX(-50%)";
+        floatTip.style.padding = "10px";
+        floatTip.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
+        floatTip.style.color = "#fff";
+        floatTip.style.borderRadius = "5px";
+        floatTip.style.boxShadow = "0 2px 5px rgba(0, 0, 0, 0.5)";
+        floatTip.style.zIndex = "9999";
+        floatTip.innerHTML = text;
+        floatTip.id = "myInfoFloatTip";
+        document.body.appendChild(floatTip);
+
+        if (timeout > 0) {
+            setTimeout(() => {
+                hideFloatTip();
+            }, timeout);
+        }
+    }
+
+    /**
+     * 隐藏悬浮提示框。
+     */
+    function hideFloatTip() {
+        if (document.getElementById("myInfoFloatTip")) {
+            document.getElementById("myInfoFloatTip").remove();
+        }
+    }
 
     // 创建悬浮窗
     const floatWindow = document.createElement("div");
@@ -34,7 +74,7 @@
 
     // 创建下载按钮
     const downloadButton = document.createElement("button");
-    downloadButton.innerHTML = "下载CSDN文章为Markdown<br>（支持专栏和文章页面，推荐使用typora打开下载的Markdown）";
+    downloadButton.innerHTML = "下载CSDN文章为Markdown<br>（支持专栏、文章、用户全部文章页面）<br>（推荐使用typora打开下载的Markdown）";
     downloadButton.style.textAlign = "center";
     downloadButton.style.padding = "5px 10px";
     downloadButton.style.border = "none";
@@ -58,16 +98,20 @@
     // - 专栏高速下载模式（会导致乱序，但可通过下面的加入序号排序）
     // - 专栏文章文件加入序号前缀
     // - 将专栏文章整合为压缩包
-    const settings = {};
     const optionDivList = [];
     const optionCheckBoxList = [];
 
-    function addOption(id, innerHTML, defaultValue = false) {
+    function updateAllOptions() {
+        optionCheckBoxList.forEach((optionElem) => {
+            optionElem.checked = GM_getValue(optionElem.id.replace("Checkbox", ""));
+        });
+    }
+
+    function addOption(id, innerHTML, defaultValue = false, constraints = {true: null, false: null}) {
         if (GM_getValue(id) === undefined) {
             GM_setValue(id, defaultValue);
         }
-        settings[id] = GM_getValue(id);
-        const checked = settings[id];
+        const checked = GM_getValue(id);
         const optionDiv = document.createElement("div");
         optionDiv.style.display = "flex";
         optionDiv.style.alignItems = "left";
@@ -87,20 +131,43 @@
         floatWindow.appendChild(optionDiv);
         optionCheckbox.addEventListener("change", function () {
             GM_setValue(id, optionCheckbox.checked);
+            if (optionCheckbox.checked) {
+                if (constraints.true !== null) {
+                    for (const constraint of constraints.true) {
+                        if (constraint.id !== undefined && constraint.value !== undefined) {
+                            GM_setValue(constraint.id, constraint.value);
+                        }
+                    }
+                    updateAllOptions();
+                }
+            } else {
+                if (constraints.false !== null) {
+                    for (const constraint of constraints.false) {
+                        if (constraint.id !== undefined && constraint.value !== undefined) {
+                            GM_setValue(constraint.id, constraint.value);
+                        }
+                    }
+                    updateAllOptions();
+                }
+            }
         });
     }
 
-    addOption("parallelDownload", "专栏并行下载模式（下载乱序，但可通过下面的加入序号排序）");
-    addOption("fastDownload", "专栏高速下载模式（有代码块语言无法识别等问题，能接受就开）");
-    addOption("addSerialNumber", "专栏文章文件加入序号前缀");
-    addOption("zipCategories", "下载为压缩包");
-    addOption("addArticleInfoInYaml", "添加文章元信息（以YAML元信息格式）");
+    addOption("parallelDownload", "专栏并行下载模式（下载乱序，但可通过下面的加入序号排序）", false);
+    addOption("fastDownload", "专栏高速下载模式（有代码块语言无法识别等问题，能接受就开）", false);
+    addOption("addSerialNumber", "专栏文章文件加入序号前缀", false);
+    addOption("zipCategories", "下载为压缩包", true, {false: [{id: "saveWebImages", value: false}]});
+    addOption("addArticleInfoInYaml", "添加文章元信息（以YAML元信息格式）", false);
     addOption("addArticleTitleToMarkdown", "添加文章标题（以一级标题形式）", true);
     addOption("addArticleInfoInBlockquote", "添加阅读量、点赞等信息（以引用块形式）", true);
+    addOption("saveWebImages", "将图片保存到与MD文件同名的文件夹内，以相对路径使用", true, {true: [{id: "zipCategories", value: true}]});
+    addOption("forceImageCentering", "全部图片居中排版", false);
+    addOption("enableImageSize", "启用图片宽高属性（如果网页中的图片具有宽高）", true);
+    addOption("removeCSDNSearchLink", "移除CSDN搜索链接", true);
 
     function enableFloatWindow() {
         downloadButton.disabled = false;
-        downloadButton.innerHTML = "下载CSDN文章为Markdown<br>（支持专栏和文章页面，推荐使用typora打开下载的Markdown）";
+        downloadButton.innerHTML = "下载CSDN文章为Markdown<br>（支持专栏、文章、用户全部文章页面）<br>（推荐使用typora打开下载的Markdown）";
         optionCheckBoxList.forEach((optionElem) => {optionElem.disabled = false;});
     }
 
@@ -127,10 +194,11 @@
     // 监听窗口的 focus 事件
     window.addEventListener('focus', function() {
         // 脚本选项可能在其他窗口中被修改，所以每次窗口获得焦点时都要重新加载
-        optionCheckBoxList.forEach((optionElem) => {
-            optionElem.checked = GM_getValue(optionElem.id.replace("Checkbox", ""));
-        });
+        updateAllOptions();
     });
+
+    // 全局变量
+    let fileQueue = [];
 
     /**
      * 将 SVG 图片转换为 Base64 编码的字符串。
@@ -157,8 +225,8 @@
 
     /**
      * 清除字符串中的特殊字符。
-     * @param {*} str
-     * @returns
+     * @param {string} str - 输入的字符串。
+     * @returns {string} - 清除特殊字符后的字符串。
      */
     function clearSpecialChars(str) {
         return str
@@ -168,27 +236,183 @@
                 ""
             );
     }
+    
+    /**
+     * 依靠油猴脚本的 GM_xmlhttpRequest 方法获取网络资源。
+     * @param {string} url - 网络资源的 URL。
+     * @returns {Promise<Blob>} - 网络资源的 Blob 对象。
+     */
+    async function fetchImageAsBlob(url) {
+        return new Promise((resolve, reject) => {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: url,
+                responseType: 'blob',
+                onload: function(response) {
+                    if (response.status === 200) {
+                        resolve(response.response);
+                    } else {
+                        reject(`Failed to fetch resource: ${url}`);
+                    }
+                },
+                onerror: function() {
+                    reject(`Error fetching resource: ${url}`);
+                }
+            });
+        });
+    }
+
+    /**
+     * 将网络图片添加到 fileQueue { filename, content, type }，并返回本地路径。
+     * 会将图片名称改为 articleTitle/count.后缀 的形式，这样在添加图片到 zip 的时候就会自动创建文件夹。
+     * @param {string|Element} imgElem - 图片的网络路径或图片元素。
+     * @param {string} articleTitle - 文章标题。
+     * @returns {Promise<string>} - 本地路径，格式为 ./articleTitle/图片名 。
+     */
+    async function saveWebImageToLocal(img, articleTitle) {
+        // 用于记录当前文章中的图片数量
+        if (!window.imageCount) {
+            window.imageCount = {};
+        }
+        if (!window.imageCount[articleTitle]) {
+            window.imageCount[articleTitle] = 0;
+        }
+        window.imageCount[articleTitle]++;
+
+        let imgUrl = "";
+        if (typeof img === "string") {
+            // 如果是字符串，则说明传入的是图片的网络路径
+            imgUrl = img;
+        } else if (img instanceof Element) {
+            // 如果是元素，则说明传入的是图片元素
+            imgUrl = img.getAttribute("src");
+        } else {
+            throw new Error("[saveWebImageToLocal] Invalid argument: img must be a string or an Element.");
+        }
+
+        // 获取图片的 Blob 对象
+        const blob = await fetchImageAsBlob(imgUrl);
+
+        // 生成文件名
+        const filename = `${articleTitle}/${window.imageCount[articleTitle]}.${imgUrl.split('.').pop()}`;
+        fileQueue.push({ filename, content: blob, type: blob.type });
+
+        // 返回本地路径
+        return `./${filename}`;
+    }
+
+
+    /**
+     * 将文件名转换为安全的文件名。（路径名中不允许的字符都替换为其对应的全角字符）
+     * @param {string} filename - 原始文件名。
+     * @returns {string} - 安全的文件名。
+     */
+    function safeFilename(filename) {
+        return filename.replace(/[\\/:*?"<>|]/g, "_");
+        // return filename
+        //     .replace(/\//g, "／")
+        //     .replace(/\\/g, "＼")
+        //     .replace(/:/g, "：")
+        //     .replace(/\*/g, "＊")
+        //     .replace(/\?/g, "？")
+        //     .replace(/"/g, "＂")
+        //     .replace(/</g, "＜")
+        //     .replace(/>/g, "＞")
+        //     .replace(/\|/g, "｜");
+    }
+
+    /**
+     * 将文本保存为文件。但也支持先缓存到队列中，给后续打包为 zip 文件使用。
+     * @param {string} content
+     * @param {string} filename
+     */
+    async function saveTextAsFile(content, filename, setCount = -1) {
+        if (setCount !== -1) {
+            saveTextAsFile.count = setCount;
+            return;
+        }
+        filename = safeFilename(filename);
+        if (GM_getValue("addSerialNumber")) {
+            if (saveTextAsFile.count !== undefined) {
+                // filename = `${saveTextAsFile.count.toString().padStart(3, "0")}_${filename}`;
+                filename = `${saveTextAsFile.count}_${filename}`;
+                saveTextAsFile.count--;
+            }
+        }
+        if (GM_getValue("zipCategories")) {
+            // if (saveTextAsFile.queue === undefined) {
+            //     saveTextAsFile.queue = [];
+            // }
+            // saveTextAsFile.queue.push({ text, filename });
+            // 保存到队列中，等待打包
+            fileQueue.push({ filename, type: "text/plain", content });
+            return;
+        }
+        const blob = new Blob([content], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    /**
+     * 获取当前文章的序号。
+     * @returns {number} - 当前文章的序号。
+     */
+    function getCurrentArticleIndex() {
+        return saveTextAsFile.count;
+    }
+
+    /**
+     * 从 queue 中，将所有 text 转换为 md 文件，并放入文件夹中，然后将文件夹打包为 zip 文件，最后下载 zip 文件。
+     * @param {string} zipName - zip 文件名。
+     * @returns {Promise<void>}
+     */
+    async function saveAllFileToZip(zipName) {
+        if (fileQueue.length === 0) {
+            showFloatTip("【ERROR】没有文件需要保存。");
+            return;
+        }
+        zipName = safeFilename(zipName);
+        // 创建 JSZip 实例
+        const zip = new JSZip();
+
+        fileQueue.forEach(file => {
+            // 将文件添加到 ZIP 中
+            zip.file(file.filename, file.content);
+        })
+
+        // 生成 ZIP 文件
+        zip.generateAsync({ type: "blob" })
+            .then(blob => {
+                // 创建下载链接
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `${zipName}.zip`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+    
+                fileQueue = [];
+            })
+            .catch(error => {
+                console.error("Error generating ZIP file:", error);
+            });
+    }
 
     /**
      * 将 HTML 内容转换为 Markdown 格式。
-     * @param {Element} html - HTML 内容。
-     * @returns {string} - 转换后的 Markdown 字符串。
+     * @param {Element} articleElement - 文章的 DOM 元素。
+     * @param {string} markdownFileName - Markdown 文件名。
+     * @returns {Promise<string>} - 转换后的 Markdown 字符串。
      */
-    function htmlToMarkdown(html) {
-        // // Create a DOM parser
-        // const document = new JSDOM(html).window.document;
-        // const content = document.getElementById("content_views");
-
-        // Create a DOM parser
-        // const parser = new DOMParser();
-        // const doc = parser.parseFromString(html, 'text/html');
-        // const content = doc.getElementById('content_views');
-
-        // Directly use the input HTML content
-        const content = html;
-
-        let markdown = "";
-
+    async function htmlToMarkdown(articleElement, markdownFileName = "") {
         // 辅助函数，用于转义特殊的 Markdown 字符
         const escapeMarkdown = (text) => {
             // return text.replace(/([\\`*_\{\}\[\]()#+\-.!])/g, "\\$1").trim();
@@ -199,9 +423,9 @@
          * 递归处理 DOM 节点并将其转换为 Markdown。
          * @param {Node} node - 当前的 DOM 节点。
          * @param {number} listLevel - 当前列表嵌套级别。
-         * @returns {string} - 节点的 Markdown 字符串。
+         * @returns {Promise<string>} - 节点的 Markdown 字符串。
          */
-        function processNode(node, listLevel = 0) {
+        async function processNode(node, listLevel = 0) {
             let result = "";
             const ELEMENT_NODE = 1;
             const TEXT_NODE = 3;
@@ -227,7 +451,7 @@
                                     result += `**目录**\n\n[TOC]\n\n`;
                                     break;
                                 }
-                                let text = processChildren(node, listLevel);
+                                let text = await processChildren(node, listLevel);
                                 if (style) {
                                     if (style.includes("padding-left")) {
                                         break;
@@ -249,18 +473,18 @@
                             break;
                         case "strong":
                         case "b":
-                            result += ` **${processChildren(node, listLevel).trim()}** `;
+                            result += ` **${(await processChildren(node, listLevel)).trim()}** `;
                             break;
                         case "em":
                         case "i":
-                            result += ` *${processChildren(node, listLevel).trim()}* `;
+                            result += ` *${(await processChildren(node, listLevel)).trim()}* `;
                             break;
                         case "u":
-                            result += ` <u>${processChildren(node, listLevel).trim()}</u> `;
+                            result += ` <u>${(await processChildren(node, listLevel)).trim()}</u> `;
                             break;
                         case "s":
                         case "strike":
-                            result += ` ~~${processChildren(node, listLevel).trim()}~~ `;
+                            result += ` ~~${(await processChildren(node, listLevel)).trim()}~~ `;
                             break;
                         case "a":
                             {
@@ -269,13 +493,17 @@
                                     break;
                                 }
                                 const href = node.getAttribute("href") || "";
-                                const text = processChildren(node, listLevel);
+                                const text = await processChildren(node, listLevel);
+                                if (href.includes("https://so.csdn.net/so/search") && GM_getValue("removeCSDNSearchLink")) {
+                                    result += `${text}`;
+                                    break;
+                                }
                                 result += ` [${text}](${href}) `;
                             }
                             break;
                         case "img":
                             {
-                                const src = node.getAttribute("src") || "";
+                                let src = node.getAttribute("src") || "";
                                 const alt = node.getAttribute("alt") || "";
                                 const cls = node.getAttribute("class") || "";
                                 // const width = node.getAttribute("width") || "";
@@ -289,14 +517,18 @@
                                 if (cls.includes("mathcode")) {
                                     result += `$$\n${alt}\n$$`;
                                 } else {
-                                    if (src.includes("#pic_center")) {
+                                    if (src.includes("#pic_center") || GM_getValue("forceImageCentering")) {
                                         result += "\n\n";
                                     } else {
                                         result += " ";
                                     }
-                                    if (width && height) {
+                                    if (GM_getValue("saveWebImages")) {
+                                        src = await saveWebImageToLocal(node, markdownFileName);
+                                    }
+                                    if (width && height && GM_getValue("enableImageSize")) {
                                         // result += `<img src="${src}" alt="${alt}" width="${width}" height="${height}" />`;
-                                        result += `<img src="${src}" alt="${alt}" width="${width}" height="${height}" style="box-sizing:content-box;" />`;
+                                        // result += `<img src="${src}" alt="${alt}" style="max-width:${width}px; max-height:${height}px; box-sizing:content-box;" />`;
+                                        result += `<img src="${src}" alt="${alt}" style="max-height:${height}px; box-sizing:content-box;" />`;
                                     } else {
                                         result += `![${alt}](${src})`;
                                     }
@@ -304,14 +536,14 @@
                             }
                             break;
                         case "ul":
-                            result += processList(node, listLevel, false);
+                            result += await processList(node, listLevel, false);
                             break;
                         case "ol":
-                            result += processList(node, listLevel, true);
+                            result += await processList(node, listLevel, true);
                             break;
                         case "blockquote":
                             {
-                                const text = processChildren(node, listLevel)
+                                const text = (await processChildren(node, listLevel))
                                     .trim()
                                     .split("\n")
                                     .map((line) => (line ? `> ${line}` : "> "))
@@ -344,7 +576,7 @@
                                         const languageMatch = className.split(" ");
                                         language = languageMatch ? languageMatch[1] : "";
                                     }
-                                    result += `\`\`\`${language}\n${processCodeBlock(codeNode)}\`\`\`\n\n`;
+                                    result += `\`\`\`${language}\n${await processCodeBlock(codeNode)}\`\`\`\n\n`;
                                 } else {
                                     console.warn("Code block without <code> element:", node.outerHTML);
                                     const codeText = node.textContent.replace(/^\s+|\s+$/g, "");
@@ -367,7 +599,7 @@
                             result += `  \n`;
                             break;
                         case "table":
-                            result += processTable(node) + "\n\n";
+                            result += await processTable(node) + "\n\n";
                             break;
                         // case 'iframe':
                         //     {
@@ -396,7 +628,7 @@
                                     const customTitle = node.querySelector("h4").textContent || "";
                                     result += `**${customTitle}**\n\n[TOC]\n\n`;
                                 } else {
-                                    result += processChildren(node, listLevel);
+                                    result += await processChildren(node, listLevel);
                                 }
                             }
                             break;
@@ -441,9 +673,9 @@
                                 }
                                 const style = node.getAttribute("style") || "";
                                 if (style.includes("background-color") || style.includes("color")) {
-                                    result += `<span style="${style}">${processChildren(node, listLevel)}</span>`;
+                                    result += `<span style="${style}">${await processChildren(node, listLevel)}</span>`;
                                 } else {
-                                    result += processChildren(node, listLevel);
+                                    result += await processChildren(node, listLevel);
                                 }
                             }
                             break;
@@ -451,10 +683,10 @@
                             result += ` <kbd>${node.textContent}</kbd> `;
                             break;
                         case "mark":
-                            result += ` <mark>${processChildren(node, listLevel)}</mark> `;
+                            result += ` <mark>${await processChildren(node, listLevel)}</mark> `;
                             break;
                         case "sub":
-                            result += `<sub>${processChildren(node, listLevel)}</sub>`;
+                            result += `<sub>${await processChildren(node, listLevel)}</sub>`;
                             break;
                         case "sup":
                             {
@@ -462,7 +694,7 @@
                                 if (node_class && node_class.includes("footnote-ref")) {
                                     result += `[^${node.textContent}]`;
                                 } else {
-                                    result += `<sup>${processChildren(node, listLevel)}</sup>`;
+                                    result += `<sup>${await processChildren(node, listLevel)}</sup>`;
                                 }
                             }
                             break;
@@ -494,7 +726,7 @@
                             {
                                 const node_class = node.getAttribute("class");
                                 if (node_class && node_class.includes("footnotes")) {
-                                    result += processFootnotes(node);
+                                    result += await processFootnotes(node);
                                 }
                             }
                             break;
@@ -508,8 +740,11 @@
                             // 自定义列表，懒得解析了，直接用 html 吧
                             result += `${shrinkHtml(node.outerHTML)}\n\n`;
                             break;
+                        case 'abbr':
+                            result += `${shrinkHtml(node.outerHTML)}`;
+                            break;
                         default:
-                            result += processChildren(node, listLevel);
+                            result += await processChildren(node, listLevel);
                             result += "\n\n";
                             break;
                     }
@@ -523,7 +758,6 @@
                 default:
                     break;
             }
-
             return result;
         }
 
@@ -531,13 +765,13 @@
          * 处理给定节点的子节点。
          * @param {Node} node - 父节点。
          * @param {number} listLevel - 当前列表嵌套级别。
-         * @returns {string} - 子节点拼接后的 Markdown 字符串。
+         * @returns {Promise<string>} - 子节点拼接后的 Markdown 字符串。
          */
-        function processChildren(node, listLevel) {
+        async function processChildren(node, listLevel) {
             let text = "";
-            node.childNodes.forEach((child) => {
-                text += processNode(child, listLevel);
-            });
+            for (const child of node.childNodes) {
+                text += await processNode(child, listLevel);
+            }
             return text;
         }
 
@@ -546,16 +780,18 @@
          * @param {Element} node - 列表元素。
          * @param {number} listLevel - 当前列表嵌套级别。
          * @param {boolean} ordered - 列表是否有序。
-         * @returns {string} - 列表的 Markdown 字符串。
+         * @returns {Promise<string>} - 列表的 Markdown 字符串。
          */
-        function processList(node, listLevel, ordered) {
+        async function processList(node, listLevel, ordered) {
             let text = "";
             const children = Array.from(node.children).filter((child) => child.tagName.toLowerCase() === "li");
             text += "\n";
-            children.forEach((child, index) => {
+            for (let index = 0; index < children.length; index++) {
+                const child = children[index];
                 let prefix = ordered ? `${"   ".repeat(listLevel)}${index + 1}. ` : `${"  ".repeat(listLevel)}- `;
-                text += `${prefix}${processChildren(child, listLevel + 1).trim()}\n`;
-            });
+                const childText = (await processChildren(child, listLevel + 1)).trim();
+                text += `${prefix}${childText}\n`;
+            }
             text += `\n`;
             return text;
         }
@@ -563,9 +799,9 @@
         /**
          * 处理表格。
          * @param {Element} node - 包含表格的元素。
-         * @returns {string} - 表格的 Markdown 字符串。
+         * @returns {Promise<string>} - 表格的 Markdown 字符串。
          */
-        function processTable(node) {
+        async function processTable(node) {
             const rows = Array.from(node.querySelectorAll("tr"));
             if (rows.length === 0) return "";
 
@@ -573,7 +809,7 @@
 
             // Process header
             const headerCells = Array.from(rows[0].querySelectorAll("th, td"));
-            const headers = headerCells.map((cell) => processNode(cell).trim());
+            const headers = await Promise.all(headerCells.map(async (cell) => (await processNode(cell)).trim()));
             table += `| ${headers.join(" | ")} |\n`;
 
             // Process separator
@@ -586,7 +822,7 @@
                 } else if (align === "left") {
                     return ":---";
                 } else {
-                    return "---";
+                    return ":---:";
                 }
             });
             table += `|${alignments.join("|")}|\n`;
@@ -594,8 +830,8 @@
             // Process body
             for (let i = 1; i < rows.length; i++) {
                 const cells = Array.from(rows[i].querySelectorAll("td"));
-                const row = cells.map((cell) => processNode(cell).trim()).join(" | ");
-                table += `| ${row} |\n`;
+                const row = await Promise.all(cells.map(async (cell) => (await processNode(cell)).trim()));
+                table += `| ${row.join(" | ")} |\n`;
             }
 
             return table;
@@ -604,9 +840,9 @@
         /**
          * 处理代码块。有两种代码块，一种是老版本的代码块，一种是新版本的代码块。
          * @param {Element} node - 包含代码块的元素。一般是 <pre> 元素。
-         * @returns {string} - 代码块的 Markdown 字符串。
+         * @returns {Promise<string>} - 代码块的 Markdown 字符串。
          */
-        function processCodeBlock(codeNode) {
+        async function processCodeBlock(codeNode) {
             // 查找 code 内部是否有 ol 元素，这两个是老/新版本的代码块，需要分开处理
             const node = codeNode.querySelector("ol");
 
@@ -638,123 +874,27 @@
         /**
          * 处理脚注。
          * @param {Element} node - 包含脚注的元素。
-         * @returns {string} - 脚注的 Markdown 字符串。
+         * @returns {Promise<string>} - 脚注的 Markdown 字符串。
          */
-        function processFootnotes(node) {
+        async function processFootnotes(node) {
             const footnotes = Array.from(node.querySelectorAll("li"));
             let result = "";
 
-            footnotes.forEach((li, index) => {
-                const text = processNode(li).replaceAll("\n", " ").replaceAll("↩︎", "").trim();
+            for (let index = 0; index < footnotes.length; index++) {
+                const li = footnotes[index];
+                const text = (await processNode(li)).replaceAll("\n", " ").replaceAll("↩︎", "").trim();
                 result += `[^${index + 1}]: ${text}\n`;
-            });
+            }
 
             return result;
         }
 
-        // Start processing child nodes
-        content.childNodes.forEach((child) => {
-            markdown += processNode(child);
-        });
-
-        // // Trim excessive newlines
+        let markdown = "";
+        for (const child of articleElement.childNodes) {
+            markdown += await processNode(child);
+        }
         // markdown = markdown.replace(/[\n]{3,}/g, '\n\n');
-
         return markdown.trim();
-    }
-
-    /**
-     * 将文件名转换为安全的文件名。（路径名中不允许的字符都替换为其对应的全角字符）
-     * @param {string} filename - 原始文件名。
-     * @returns {string} - 安全的文件名。
-     */
-    function safeFilename(filename) {
-        return filename.replace(/[\\/:*?"<>|]/g, "_");
-        // return filename
-        //     .replace(/\//g, "／")
-        //     .replace(/\\/g, "＼")
-        //     .replace(/:/g, "：")
-        //     .replace(/\*/g, "＊")
-        //     .replace(/\?/g, "？")
-        //     .replace(/"/g, "＂")
-        //     .replace(/</g, "＜")
-        //     .replace(/>/g, "＞")
-        //     .replace(/\|/g, "｜");
-    }
-
-    /**
-     * 将文本保存为文件。但也支持先缓存到队列中，给后续打包为 zip 文件使用。
-     * @param {string} text
-     * @param {string} filename
-     */
-    function saveTextAsFile(text, filename, setCount = -1) {
-        if (setCount !== -1) {
-            saveTextAsFile.count = setCount;
-            return;
-        }
-        filename = safeFilename(filename);
-        if (GM_getValue("addSerialNumber")) {
-            if (saveTextAsFile.count !== undefined) {
-                // filename = `${saveTextAsFile.count.toString().padStart(3, "0")}_${filename}`;
-                filename = `${saveTextAsFile.count}_${filename}`;
-                saveTextAsFile.count--;
-            }
-        }
-        if (GM_getValue("zipCategories")) {
-            if (saveTextAsFile.queue === undefined) {
-                saveTextAsFile.queue = [];
-            }
-            saveTextAsFile.queue.push({ text, filename });
-            return;
-        }
-        const blob = new Blob([text], { type: "text/plain" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    }
-
-    /**
-     * 从 queue 中，将所有 text 转换为 md 文件，并放入文件夹中，然后将文件夹打包为 zip 文件，最后下载 zip 文件。
-     */
-    function saveAllTextAsZip(zipName) {
-        if (saveTextAsFile.queue === undefined || saveTextAsFile.queue.length === 0) {
-            console.log("No files to save.");
-            return;
-        }
-        zipName = safeFilename(zipName);
-        // 创建 JSZip 实例
-        const zip = new JSZip();
-
-        // 遍历队列中的每个文件
-        saveTextAsFile.queue.forEach(file => {
-            // 将文本文件添加到 ZIP 中
-            zip.file(file.filename, file.text);
-        });
-
-        // 生成 ZIP 文件
-        zip.generateAsync({ type: "blob" })
-            .then(blob => {
-                // 创建下载链接
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `${zipName}.zip`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-
-                // 清空队列
-                saveTextAsFile.queue = [];
-            })
-            .catch(error => {
-                console.error("Error generating ZIP file:", error);
-            });
     }
 
     /**
@@ -773,7 +913,12 @@
         let mode = GM_getValue("parallelDownload") ? "并行" : "串行";
         mode += GM_getValue("fastDownload") ? "快速" : "完整";
         showFloatTip(`正在以${mode}模式下载文章：` + articleTitle);
-        let markdown = htmlToMarkdown(htmlInput);
+
+        let serialNumber = "";
+        if (GM_getValue("addSerialNumber")) {
+            serialNumber = `${getCurrentArticleIndex()}_`;
+        }
+        let markdown = await htmlToMarkdown(htmlInput, serialNumber + articleTitle);
 
         if (GM_getValue("addArticleInfoInBlockquote")) {
             markdown = `> ${articleInfo}\n\n${markdown}`;
@@ -782,7 +927,7 @@
         if (GM_getValue("addArticleTitleToMarkdown")) {
             markdown = `# ${articleTitle}\n\n${markdown}`;
         }
-
+        
         if (GM_getValue("addArticleInfoInYaml")) {
             const article_info_box = doc_body.querySelector(".article-info-box");
             const meta_title = articleTitle;
@@ -803,49 +948,10 @@
         }
 
         // markdown = `# ${articleTitle}\n\n> ${articleInfo}\n\n${markdown}`;
-
-        saveTextAsFile(markdown, `${articleTitle}.md`);
+        
+        await saveTextAsFile(markdown, `${articleTitle}.md`);
         if (getZip) {
-            saveAllTextAsZip(`${articleTitle}`);
-        }
-    }
-
-    /**
-     * 显示悬浮提示框。
-     * @param {string} text - 提示框的文本内容。
-     */
-    function showFloatTip(text, timeout = 0) {
-        if (document.getElementById("myInfoFloatTip")) {
-            document.getElementById("myInfoFloatTip").remove();
-        }
-        const floatTip = document.createElement("div");
-        floatTip.style.position = "fixed";
-        floatTip.style.top = "40%";
-        floatTip.style.left = "50%";
-        floatTip.style.transform = "translateX(-50%)";
-        floatTip.style.padding = "10px";
-        floatTip.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
-        floatTip.style.color = "#fff";
-        floatTip.style.borderRadius = "5px";
-        floatTip.style.boxShadow = "0 2px 5px rgba(0, 0, 0, 0.5)";
-        floatTip.style.zIndex = "9999";
-        floatTip.textContent = text;
-        floatTip.id = "myInfoFloatTip";
-        document.body.appendChild(floatTip);
-
-        if (timeout > 0) {
-            setTimeout(() => {
-                hideFloatTip();
-            }, timeout);
-        }
-    }
-
-    /**
-     * 隐藏悬浮提示框。
-     */
-    function hideFloatTip() {
-        if (document.getElementById("myInfoFloatTip")) {
-            document.getElementById("myInfoFloatTip").remove();
+            await saveAllFileToZip(`${articleTitle}`);
         }
     }
 
@@ -920,7 +1026,7 @@
             const column_data = document.querySelector(".column_data").textContent;
             // 匹配：文章数：count\n
             const count = column_data.match(/文章数：(\d+)/)[1];
-            saveTextAsFile(count, "count.txt", count);
+            await saveTextAsFile(count, "count.txt", count);
         }
         let doc_body = document.body;
         while (true) {
@@ -955,10 +1061,73 @@
         // document.body.innerHTML = original_html; // 恢复原始页面内容
 
         if (GM_getValue("zipCategories")) {
-            saveAllTextAsZip(`${document.title}`);
+            await saveAllFileToZip(`${document.title}`);
         }
 
         showFloatTip("专栏文章全部下载完成。", 3000);
+    }
+
+    /**
+     * 下载用户的全部文章为 Markdown 格式。
+     * @returns {Promise<void>} - 下载完成后的 Promise 对象。
+     */
+    async function downloadAllArticlesOfUserToMarkdown() {
+        showFloatTip("开始下载用户全部文章。可能需要进行多次页面滚动以获取全部文章链接，请耐心等待。");
+
+        const mainContent = document.body.querySelector(".mainContent")
+        const navListData = document.body.querySelector(".navList").textContent;
+        const articleCount = navListData.match(/文章(\d+)/)[1];
+
+        if (GM_getValue("addSerialNumber")) {
+            await saveTextAsFile(null, null, articleCount);
+        }
+        
+        const url_list = [];
+        const url_set = new Set();
+
+        while (true) {
+            // 等待 2 秒，等待页面加载完成
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            window.scrollTo({
+                top: document.body.scrollHeight,
+                behavior: 'smooth' // 可选，使滚动平滑
+            });
+            let end = true;
+            mainContent.querySelectorAll("article").forEach((item) => {
+                const url = item.querySelector("a").href;
+                if (!url_set.has(url)) {
+                    url_list.push(url);
+                    url_set.add(url);
+                    end = false;
+                }
+            });
+            if (end) break;
+        }
+
+        // 滚回顶部
+        window.scrollTo({
+            top: 0,
+            behavior: 'smooth' // 可选，使滚动平滑
+        });
+
+        if (url_list.length === 0) {
+            showFloatTip("没有找到文章。");
+        }
+
+        // 下载每篇文章
+        if (GM_getValue("parallelDownload")) {
+            await Promise.all(url_list.map((url) => downloadArticleFromCategory(url)));
+        } else {
+            for (const url of url_list) {
+                await downloadArticleFromCategory(url);
+            }
+        }
+
+        if (GM_getValue("zipCategories")) {
+            await saveAllFileToZip(`${document.title}`);
+        }
+
+        showFloatTip("用户全部文章下载完成。", 3000);
     }
 
     /**
@@ -978,6 +1147,9 @@
             // 文章
             await downloadCSDNArticleToMarkdown(document.body, GM_getValue("zipCategories"));
             showFloatTip("文章下载完成。", 3000);
+        } else if (url.includes("type=blog")) {
+            await downloadAllArticlesOfUserToMarkdown();
+            showFloatTip("用户全部文章下载完成。", 3000);
         } else {
             alert("无法识别的页面。");
         }
