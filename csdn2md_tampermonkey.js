@@ -1,15 +1,17 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      1.0.3
+// @version      1.0.5
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
 // @icon         https://g.csdnimg.cn/static/logo/favicon32.ico
-// @grant        none
+// @grant        GM_setValue
+// @grant        GM_getValue
 // @run-at       document-end
 // @license      PolyForm Strict License 1.0.0  https://polyformproject.org/licenses/strict/1.0.0/
 // @supportURL   https://github.com/Qalxry/csdn2md
+// @require https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js
 // ==/UserScript==
 
 (function () {
@@ -21,15 +23,18 @@
     floatWindow.style.bottom = "20px";
     floatWindow.style.right = "20px";
     floatWindow.style.padding = "10px";
-    floatWindow.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
+    floatWindow.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
     floatWindow.style.color = "#fff";
     floatWindow.style.borderRadius = "5px";
     floatWindow.style.boxShadow = "0 2px 5px rgba(0, 0, 0, 0.5)";
     floatWindow.style.zIndex = "9999";
+    floatWindow.style.display = "flex";
+    floatWindow.style.flexDirection = "column"; // 里面的元素每个占一行
+    floatWindow.id = "myFloatWindow";
 
     // 创建下载按钮
     const downloadButton = document.createElement("button");
-    downloadButton.textContent = "下载CSDN文章为Markdown\n（支持专栏和文章页面，推荐使用typora打开下载的Markdown）";
+    downloadButton.innerHTML = "下载CSDN文章为Markdown<br>（支持专栏和文章页面，推荐使用typora打开下载的Markdown）";
     downloadButton.style.textAlign = "center";
     downloadButton.style.padding = "5px 10px";
     downloadButton.style.border = "none";
@@ -37,13 +42,95 @@
     downloadButton.style.color = "white";
     downloadButton.style.borderRadius = "3px";
     downloadButton.style.cursor = "pointer";
-
-    // 按钮点击事件
-    downloadButton.addEventListener("click", runMain);
-
+    downloadButton.id = "myDownloadButton";
+    // 为下载按钮添加hover效果
+    downloadButton.addEventListener("mouseover", function () {
+        downloadButton.style.backgroundColor = "#45a049";
+    });
+    downloadButton.addEventListener("mouseout", function () {
+        downloadButton.style.backgroundColor = "#4CAF50";
+    });
     // 将按钮添加到悬浮窗
     floatWindow.appendChild(downloadButton);
+
+    // 创建选项 checkbox
+    // 从油猴脚本中获取选项的值
+    // - 专栏高速下载模式（会导致乱序，但可通过下面的加入序号排序）
+    // - 专栏文章文件加入序号前缀
+    // - 将专栏文章整合为压缩包
+    const settings = {};
+    const optionDivList = [];
+    const optionCheckBoxList = [];
+
+    function addOption(id, innerHTML, defaultValue = false) {
+        if (GM_getValue(id) === undefined) {
+            GM_setValue(id, defaultValue);
+        }
+        settings[id] = GM_getValue(id);
+        const checked = settings[id];
+        const optionDiv = document.createElement("div");
+        optionDiv.style.display = "flex";
+        optionDiv.style.alignItems = "left";
+        const optionCheckbox = document.createElement("input");
+        optionCheckbox.type = "checkbox";
+        optionCheckbox.checked = checked;
+        optionCheckbox.id = id + "Checkbox";
+        optionCheckbox.style.marginRight = "5px";
+        const optionLabel = document.createElement("label");
+        optionLabel.htmlFor = optionCheckbox.id;
+        optionLabel.textContent = innerHTML;
+        optionLabel.style.marginRight = "10px";
+        optionDiv.appendChild(optionCheckbox);
+        optionDiv.appendChild(optionLabel);
+        optionDivList.push(optionDiv);
+        optionCheckBoxList.push(optionCheckbox);
+        floatWindow.appendChild(optionDiv);
+        optionCheckbox.addEventListener("change", function () {
+            GM_setValue(id, optionCheckbox.checked);
+        });
+    }
+
+    addOption("parallelDownload", "专栏并行下载模式（下载乱序，但可通过下面的加入序号排序）");
+    addOption("fastDownload", "专栏高速下载模式（有代码块语言无法识别等问题，能接受就开）");
+    addOption("addSerialNumber", "专栏文章文件加入序号前缀");
+    addOption("zipCategories", "下载为压缩包");
+    addOption("addArticleInfoInYaml", "添加文章元信息（以YAML元信息格式）");
+    addOption("addArticleTitleToMarkdown", "添加文章标题（以一级标题形式）", true);
+    addOption("addArticleInfoInBlockquote", "添加阅读量、点赞等信息（以引用块形式）", true);
+
+    function enableFloatWindow() {
+        downloadButton.disabled = false;
+        downloadButton.innerHTML = "下载CSDN文章为Markdown<br>（支持专栏和文章页面，推荐使用typora打开下载的Markdown）";
+        optionCheckBoxList.forEach((optionElem) => {optionElem.disabled = false;});
+    }
+
+    function disableFloatWindow() {
+        downloadButton.disabled = true;
+        downloadButton.innerHTML = "正在下载，请稍候...";
+        optionCheckBoxList.forEach((optionElem) => {optionElem.disabled = true;});
+    }
+
+    async function testMain() {
+        // 1s
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        console.log("1s");
+    }
+
+    // 按钮点击事件
+    downloadButton.addEventListener("click", async function () {
+        await runMain();
+        // await testMain();
+    });
+
     document.body.appendChild(floatWindow);
+
+    // 监听窗口的 focus 事件
+    window.addEventListener('focus', function() {
+        // 脚本选项可能在其他窗口中被修改，所以每次窗口获得焦点时都要重新加载
+        optionCheckBoxList.forEach((optionElem) => {
+            optionElem.checked = GM_getValue(optionElem.id.replace("Checkbox", ""));
+        });
+    });
 
     /**
      * 将 SVG 图片转换为 Base64 编码的字符串。
@@ -70,11 +157,16 @@
 
     /**
      * 清除字符串中的特殊字符。
-     * @param {*} str 
-     * @returns 
+     * @param {*} str
+     * @returns
      */
     function clearSpecialChars(str) {
-        return str.replace(/[\s]{2,}/g, "").replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF\u00AD\u034F\u061C\u180E\u2800\u3164\uFFA0\uFFF9-\uFFFB]/g, "");
+        return str
+            .replace(/[\s]{2,}/g, "")
+            .replace(
+                /[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF\u00AD\u034F\u061C\u180E\u2800\u3164\uFFA0\uFFF9-\uFFFB]/g,
+                ""
+            );
     }
 
     /**
@@ -246,7 +338,7 @@
                                             }
                                         }
                                         language = language.replace("language-", "");
-                                    } 
+                                    }
                                     // 老版本的代码块
                                     else if (className.startsWith("hljs")) {
                                         const languageMatch = className.split(" ");
@@ -314,10 +406,14 @@
                                 if (node_class) {
                                     if (node_class.includes("katex--inline")) {
                                         // class="katex-mathml"
-                                        const mathml = clearSpecialChars(node.querySelector(".katex-mathml").textContent);
-                                        const katex_html = clearSpecialChars(node.querySelector(".katex-html").textContent);
+                                        const mathml = clearSpecialChars(
+                                            node.querySelector(".katex-mathml").textContent
+                                        );
+                                        const katex_html = clearSpecialChars(
+                                            node.querySelector(".katex-html").textContent
+                                        );
                                         // result += ` $${mathml.replace(katex_html, "")}$ `;
-                                        
+
                                         if (mathml.startsWith(katex_html)) {
                                             result += ` $${mathml.replace(katex_html, "")}$ `;
                                         } else {
@@ -326,8 +422,12 @@
                                         }
                                         break;
                                     } else if (node_class.includes("katex--display")) {
-                                        const mathml = clearSpecialChars(node.querySelector(".katex-mathml").textContent);
-                                        const katex_html = clearSpecialChars(node.querySelector(".katex-html").textContent);
+                                        const mathml = clearSpecialChars(
+                                            node.querySelector(".katex-mathml").textContent
+                                        );
+                                        const katex_html = clearSpecialChars(
+                                            node.querySelector(".katex-html").textContent
+                                        );
                                         // result += `$$\n${mathml.replace(katex_html, "")}\n$$\n\n`;
 
                                         if (mathml.startsWith(katex_html)) {
@@ -564,11 +664,49 @@
     }
 
     /**
-     * 将文本保存为文件。
+     * 将文件名转换为安全的文件名。（路径名中不允许的字符都替换为其对应的全角字符）
+     * @param {string} filename - 原始文件名。
+     * @returns {string} - 安全的文件名。
+     */
+    function safeFilename(filename) {
+        return filename.replace(/[\\/:*?"<>|]/g, "_");
+        // return filename
+        //     .replace(/\//g, "／")
+        //     .replace(/\\/g, "＼")
+        //     .replace(/:/g, "：")
+        //     .replace(/\*/g, "＊")
+        //     .replace(/\?/g, "？")
+        //     .replace(/"/g, "＂")
+        //     .replace(/</g, "＜")
+        //     .replace(/>/g, "＞")
+        //     .replace(/\|/g, "｜");
+    }
+
+    /**
+     * 将文本保存为文件。但也支持先缓存到队列中，给后续打包为 zip 文件使用。
      * @param {string} text
      * @param {string} filename
      */
-    function saveTextAsFile(text, filename) {
+    function saveTextAsFile(text, filename, setCount = -1) {
+        if (setCount !== -1) {
+            saveTextAsFile.count = setCount;
+            return;
+        }
+        filename = safeFilename(filename);
+        if (GM_getValue("addSerialNumber")) {
+            if (saveTextAsFile.count !== undefined) {
+                // filename = `${saveTextAsFile.count.toString().padStart(3, "0")}_${filename}`;
+                filename = `${saveTextAsFile.count}_${filename}`;
+                saveTextAsFile.count--;
+            }
+        }
+        if (GM_getValue("zipCategories")) {
+            if (saveTextAsFile.queue === undefined) {
+                saveTextAsFile.queue = [];
+            }
+            saveTextAsFile.queue.push({ text, filename });
+            return;
+        }
         const blob = new Blob([text], { type: "text/plain" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -581,44 +719,102 @@
     }
 
     /**
+     * 从 queue 中，将所有 text 转换为 md 文件，并放入文件夹中，然后将文件夹打包为 zip 文件，最后下载 zip 文件。
+     */
+    function saveAllTextAsZip(zipName) {
+        if (saveTextAsFile.queue === undefined || saveTextAsFile.queue.length === 0) {
+            console.log("No files to save.");
+            return;
+        }
+        zipName = safeFilename(zipName);
+        // 创建 JSZip 实例
+        const zip = new JSZip();
+
+        // 遍历队列中的每个文件
+        saveTextAsFile.queue.forEach(file => {
+            // 将文本文件添加到 ZIP 中
+            zip.file(file.filename, file.text);
+        });
+
+        // 生成 ZIP 文件
+        zip.generateAsync({ type: "blob" })
+            .then(blob => {
+                // 创建下载链接
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `${zipName}.zip`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                // 清空队列
+                saveTextAsFile.queue = [];
+            })
+            .catch(error => {
+                console.error("Error generating ZIP file:", error);
+            });
+    }
+
+    /**
      * 下载文章内容并转换为 Markdown 格式。并保存为文件。这里会额外获取文章标题和文章信息并添加到 Markdown 文件的开头。
      * @param {Document} doc_body - 文章的 body 元素。
      * @returns {Promise<void>} - 下载完成后的 Promise 对象。
      */
-    async function downloadCSDNArticleToMarkdown(doc_body) {
+    async function downloadCSDNArticleToMarkdown(doc_body, getZip = false) {
         const articleTitle = doc_body.querySelector("#articleContentId")?.textContent.trim() || "未命名文章";
-        const articleInfo =
-            doc_body
-                .querySelector(".bar-content")
-                ?.textContent.replace(/\s{2,}/g, " ")
-                .trim() || "";
+        const articleInfo = doc_body.querySelector(".bar-content")?.textContent.replace(/\s{2,}/g, " ").trim() || "";
         const htmlInput = doc_body.querySelector("#content_views");
         if (!htmlInput) {
             alert("未找到文章内容。");
             return;
         }
+        let mode = GM_getValue("parallelDownload") ? "并行" : "串行";
+        mode += GM_getValue("fastDownload") ? "快速" : "完整";
+        showFloatTip(`正在以${mode}模式下载文章：` + articleTitle);
         let markdown = htmlToMarkdown(htmlInput);
-        markdown = `# ${articleTitle}\n\n> ${articleInfo}\n\n${markdown}`;
+
+        if (GM_getValue("addArticleInfoInBlockquote")) {
+            markdown = `> ${articleInfo}\n\n${markdown}`;
+        }
+
+        if (GM_getValue("addArticleTitleToMarkdown")) {
+            markdown = `# ${articleTitle}\n\n${markdown}`;
+        }
+
+        if (GM_getValue("addArticleInfoInYaml")) {
+            const article_info_box = doc_body.querySelector(".article-info-box");
+            const meta_title = articleTitle;
+            // 文字文字 YYYY-MM-DD HH:MM:SS 文字文字
+            const meta_date = article_info_box.querySelector(".time")?.textContent.match(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/)[0] || "";
+            let articleMeta = `title: ${meta_title}\ndate: ${meta_date}\n`;
+
+            // 文章分类
+            const meta_category_and_tags = Array.from(article_info_box.querySelectorAll(".tag-link")) || [];
+            if (meta_category_and_tags.length > 0 && article_info_box.textContent.includes("分类专栏")) {
+                articleMeta += `categories:\n- ${meta_category_and_tags[0].textContent}\n`;
+                meta_category_and_tags.shift();
+            }
+            if (meta_category_and_tags.length > 0 && article_info_box.textContent.includes("文章标签")) {
+                articleMeta += `tags:\n${Array.from(meta_category_and_tags).map((tag) => `- ${tag.textContent}`).join("\n")}\n`;
+            }
+            markdown = `---\n${articleMeta}---\n\n${markdown}`;
+        }
+
+        // markdown = `# ${articleTitle}\n\n> ${articleInfo}\n\n${markdown}`;
+
         saveTextAsFile(markdown, `${articleTitle}.md`);
+        if (getZip) {
+            saveAllTextAsZip(`${articleTitle}`);
+        }
     }
 
     /**
-     * 下载文章内容并转换为 Markdown 格式。
-     * @param {string} url - 文章的 URL。
-     * @returns {Promise<void>} - 下载完成后的 Promise 对象。
+     * 显示悬浮提示框。
+     * @param {string} text - 提示框的文本内容。
      */
-    async function downloadArticle(url) {
-        const response = await fetch(url);
-        const text = await response.text();
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(text, "text/html");
-
-        // 在这里处理文章内容并转换为 Markdown
-        const title = doc.title;
-
-        // alert('正在下载文章：' + title);
-
-        // alert 会阻塞页面，所以这里要用别的方式显示提示信息，在页面上方显示一个悬浮提示框
+    function showFloatTip(text, timeout = 0) {
         if (document.getElementById("myInfoFloatTip")) {
             document.getElementById("myInfoFloatTip").remove();
         }
@@ -633,41 +829,118 @@
         floatTip.style.borderRadius = "5px";
         floatTip.style.boxShadow = "0 2px 5px rgba(0, 0, 0, 0.5)";
         floatTip.style.zIndex = "9999";
-        floatTip.textContent = "正在下载文章：" + title;
+        floatTip.textContent = text;
         floatTip.id = "myInfoFloatTip";
         document.body.appendChild(floatTip);
 
-        // 调用下载函数
-        downloadCSDNArticleToMarkdown(doc.body);
+        if (timeout > 0) {
+            setTimeout(() => {
+                hideFloatTip();
+            }, timeout);
+        }
+    }
+
+    /**
+     * 隐藏悬浮提示框。
+     */
+    function hideFloatTip() {
+        if (document.getElementById("myInfoFloatTip")) {
+            document.getElementById("myInfoFloatTip").remove();
+        }
+    }
+
+    /**
+     * 创建一个隐藏的 iframe 并下载指定 URL 的文章。
+     * @param {string} url - 文章的 URL。
+     * @returns {Promise<void>} - 下载完成后的 Promise 对象。
+     */
+    async function downloadArticleInIframe(url) {
+        return new Promise((resolve, reject) => {
+            // 创建一个隐藏的 iframe
+            const iframe = document.createElement("iframe");
+            iframe.style.display = "none";
+            iframe.src = url;
+            document.body.appendChild(iframe);
+
+            // 监听 iframe 加载完成事件
+            iframe.onload = async () => {
+                try {
+                    const doc = iframe.contentDocument || iframe.contentWindow.document;
+
+                    // 调用下载函数
+                    await downloadCSDNArticleToMarkdown(doc.body);
+
+                    // 移除 iframe
+                    document.body.removeChild(iframe);
+
+                    resolve();
+                } catch (error) {
+                    // 在发生错误时移除 iframe 并拒绝 Promise
+                    document.body.removeChild(iframe);
+                    console.error("下载文章时出错：", error);
+                    reject(error);
+                }
+            };
+
+            // 监听 iframe 加载错误事件
+            iframe.onerror = async () => {
+                document.body.removeChild(iframe);
+                console.error("无法加载文章页面：", url);
+                reject(new Error("无法加载文章页面"));
+            };
+        });
+    }
+
+    async function downloadArticleFromCategory(url) {
+        if (GM_getValue("fastDownload")) {
+            const response = await fetch(url);
+            const text = await response.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(text, "text/html");
+            // 调用下载函数
+            await downloadCSDNArticleToMarkdown(doc.body);
+        } else {
+            await downloadArticleInIframe(url);
+        }
     }
 
     /**
      * 下载专栏的全部文章为 Markdown 格式。
      * @returns {Promise<void>} - 下载完成后的 Promise 对象。
      */
-    async function downloadCSDNCategoriesToMarkdown() {
+    async function downloadCSDNCategoryToMarkdown() {
         // 获取专栏 id，注意 url 可能是 /category_数字.html 或 /category_数字_数字.html，需要第一个数字
+        showFloatTip("开始下载专栏文章...");
         const base_url = window.location.href;
         const category_id = base_url.match(/category_(\d+)(?:_\d+)?\.html/)[1];
         let page = 1;
         const original_html = document.body.innerHTML;
+
+        if (GM_getValue("addSerialNumber")) {
+            const column_data = document.querySelector(".column_data").textContent;
+            // 匹配：文章数：count\n
+            const count = column_data.match(/文章数：(\d+)/)[1];
+            saveTextAsFile(count, "count.txt", count);
+        }
+        let doc_body = document.body;
         while (true) {
             // 获取当前页面的文章列表
             const url_list = [];
-            document.body
-                .querySelector(".column_article_list")
-                .querySelectorAll("a")
-                .forEach((item) => {
-                    url_list.push(item.href);
-                });
+            doc_body.querySelector(".column_article_list").querySelectorAll("a").forEach((item) => {
+                url_list.push(item.href);
+            });
 
             if (url_list.length === 0) {
                 break;
             }
 
             // 下载每篇文章
-            for (const url of url_list) {
-                await downloadArticle(url);
+            if (GM_getValue("parallelDownload")) {
+                await Promise.all(url_list.map((url) => downloadArticleFromCategory(url)));
+            } else {
+                for (const url of url_list) {
+                    await downloadArticleFromCategory(url);
+                }
             }
 
             // 下一页
@@ -675,9 +948,17 @@
             const next_url = base_url.replace(/category_\d+(?:_\d+)?\.html/, `category_${category_id}_${page}.html`);
             const response = await fetch(next_url);
             const text = await response.text();
-            document.body.innerHTML = text; // 更新页面内容
+            // document.body.innerHTML = text; // 更新页面内容
+            const parser = new DOMParser();
+            doc_body = parser.parseFromString(text, "text/html").body;
         }
-        document.body.innerHTML = original_html; // 恢复原始页面内容
+        // document.body.innerHTML = original_html; // 恢复原始页面内容
+
+        if (GM_getValue("zipCategories")) {
+            saveAllTextAsZip(`${document.title}`);
+        }
+
+        showFloatTip("专栏文章全部下载完成。", 3000);
     }
 
     /**
@@ -688,15 +969,18 @@
         // 检查是专栏还是文章
         // 专栏的 url 里有 category
         // 文章的 url 里有 article/details
+        disableFloatWindow();
         const url = window.location.href;
         if (url.includes("category")) {
             // 专栏
-            await downloadCSDNCategoriesToMarkdown();
+            await downloadCSDNCategoryToMarkdown();
         } else if (url.includes("article/details")) {
             // 文章
-            await downloadCSDNArticleToMarkdown(document.body);
+            await downloadCSDNArticleToMarkdown(document.body, GM_getValue("zipCategories"));
+            showFloatTip("文章下载完成。", 3000);
         } else {
             alert("无法识别的页面。");
         }
+        enableFloatWindow();
     }
 })();
