@@ -265,37 +265,56 @@
     /**
      * 将网络图片添加到 fileQueue { filename, content, type }，并返回本地路径。
      * 会将图片名称改为 articleTitle/count.后缀 的形式，这样在添加图片到 zip 的时候就会自动创建文件夹。
-     * @param {string|Element} imgElem - 图片的网络路径或图片元素。
+     * @param {string} imgUrl - 图片的网络路径。
      * @param {string} articleTitle - 文章标题。
      * @returns {Promise<string>} - 本地路径，格式为 ./articleTitle/图片名 。
      */
-    async function saveWebImageToLocal(img, articleTitle) {
+    async function saveWebImageToLocal(imgUrl, articleTitle) {
+        // 检查参数是否合法
+        if (typeof imgUrl !== "string") {
+            showFloatTip("【ERROR】Invalid argument: imgUrl must be a string.");
+            throw new Error("[saveWebImageToLocal] Invalid argument: imgUrl must be a string.");
+        }
+
+        // 去除 #pic_center
+        imgUrl = imgUrl.replace("#pic_center", "");
+
         // 用于记录当前文章中的图片数量
         if (!window.imageCount) {
             window.imageCount = {};
+            window.imageSet = {};
         }
         if (!window.imageCount[articleTitle]) {
+            window.imageSet[articleTitle] = {};
             window.imageCount[articleTitle] = 0;
         }
-        window.imageCount[articleTitle]++;
-
-        let imgUrl = "";
-        if (typeof img === "string") {
-            // 如果是字符串，则说明传入的是图片的网络路径
-            imgUrl = img;
-        } else if (img instanceof Element) {
-            // 如果是元素，则说明传入的是图片元素
-            imgUrl = img.getAttribute("src");
-        } else {
-            throw new Error("[saveWebImageToLocal] Invalid argument: img must be a string or an Element.");
+        
+        // 检查是否已保存过该图片
+        if (window.imageSet[articleTitle][imgUrl]) {
+            return window.imageSet[articleTitle][imgUrl];
         }
+
+        // 记录图片数量
+        window.imageCount[articleTitle]++;
 
         // 获取图片的 Blob 对象
         const blob = await fetchImageAsBlob(imgUrl);
 
+        let ext = imgUrl.split('.').pop();
+        const allowedExt = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "ico", "avif"];
+        if (!allowedExt.includes(ext)) {
+            console.warn(`[saveWebImageToLocal] Unsupported image format: ${ext}`);
+            ext = "";
+        } else {
+            ext = `.${ext}`;
+        }
+
         // 生成文件名
-        const filename = `${articleTitle}/${window.imageCount[articleTitle]}.${imgUrl.split('.').pop()}`;
+        const filename = `${articleTitle}/${window.imageCount[articleTitle]}${ext}`;
         fileQueue.push({ filename, content: blob, type: blob.type });
+
+        // 记录已保存的图片
+        window.imageSet[articleTitle][imgUrl] = `./${filename}`;
 
         // 返回本地路径
         return `./${filename}`;
@@ -506,13 +525,8 @@
                                 let src = node.getAttribute("src") || "";
                                 const alt = node.getAttribute("alt") || "";
                                 const cls = node.getAttribute("class") || "";
-                                // const width = node.getAttribute("width") || "";
-                                // const height = node.getAttribute("height") || "";
-
-                                // 获取实际渲染的宽度和高度
-                                const computedStyle = window.getComputedStyle(node);
-                                const width = parseFloat(computedStyle.width);
-                                const height = parseFloat(computedStyle.height);
+                                const width = node.getAttribute("width") || "";
+                                const height = node.getAttribute("height") || "";
 
                                 if (cls.includes("mathcode")) {
                                     result += `$$\n${alt}\n$$`;
@@ -523,7 +537,7 @@
                                         result += " ";
                                     }
                                     if (GM_getValue("saveWebImages")) {
-                                        src = await saveWebImageToLocal(node, markdownFileName);
+                                        src = await saveWebImageToLocal(src, markdownFileName);
                                     }
                                     if (width && height && GM_getValue("enableImageSize")) {
                                         // result += `<img src="${src}" alt="${alt}" width="${width}" height="${height}" />`;
