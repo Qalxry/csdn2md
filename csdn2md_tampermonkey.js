@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      1.1.2
+// @version      1.1.3
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -164,6 +164,7 @@
     addOption("forceImageCentering", "全部图片居中排版", false);
     addOption("enableImageSize", "启用图片宽高属性（如果网页中的图片具有宽高）", true);
     addOption("removeCSDNSearchLink", "移除CSDN搜索链接", true);
+    addOption("enableColorText", "启用彩色文字（以span形式保存）", true);
 
     function enableFloatWindow() {
         downloadButton.disabled = false;
@@ -269,7 +270,13 @@
      * @param {string} articleTitle - 文章标题。
      * @returns {Promise<string>} - 本地路径，格式为 ./articleTitle/图片名 。
      */
-    async function saveWebImageToLocal(imgUrl, articleTitle) {
+    async function saveWebImageToLocal(imgUrl, articleTitle, reset = false) {
+        if (reset) {
+            window.imageCount = {};
+            window.imageSet = {};
+            return;
+        }
+
         // 检查参数是否合法
         if (typeof imgUrl !== "string") {
             showFloatTip("【ERROR】Invalid argument: imgUrl must be a string.");
@@ -686,7 +693,7 @@
                                     }
                                 }
                                 const style = node.getAttribute("style") || "";
-                                if (style.includes("background-color") || style.includes("color")) {
+                                if ((style.includes("background-color") || style.includes("color")) && GM_getValue("enableColorText")) {
                                     result += `<span style="${style}">${await processChildren(node, listLevel)}</span>`;
                                 } else {
                                     result += await processChildren(node, listLevel);
@@ -1168,5 +1175,6 @@
             alert("无法识别的页面。");
         }
         enableFloatWindow();
+        saveWebImageToLocal(null, null, true);
     }
 })();
