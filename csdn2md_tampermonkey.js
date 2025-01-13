@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      1.1.5
+// @version      1.1.6
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -931,7 +931,7 @@
      * @param {Document} doc_body - 文章的 body 元素。
      * @returns {Promise<void>} - 下载完成后的 Promise 对象。
      */
-    async function downloadCSDNArticleToMarkdown(doc_body, getZip = false) {
+    async function downloadCSDNArticleToMarkdown(doc_body, getZip = false, url = "") {
         const articleTitle = doc_body.querySelector("#articleContentId")?.textContent.trim() || "未命名文章";
         const articleInfo = doc_body.querySelector(".bar-content")?.textContent.replace(/\s{2,}/g, " ").trim() || "";
         const htmlInput = doc_body.querySelector("#content_views");
@@ -943,6 +943,10 @@
         mode += GM_getValue("fastDownload") ? "快速" : "完整";
         showFloatTip(`正在以${mode}模式下载文章：` + articleTitle);
 
+        if (url === "") {
+            url = window.location.href;
+        }
+
         let serialNumber = "";
         if (GM_getValue("addSerialNumber")) {
             serialNumber = `${getCurrentArticleIndex()}_`;
@@ -950,7 +954,7 @@
         let markdown = await htmlToMarkdown(htmlInput, serialNumber + articleTitle);
 
         if (GM_getValue("addArticleInfoInBlockquote")) {
-            markdown = `> ${articleInfo}\n\n${markdown}`;
+            markdown = `> ${articleInfo}\n> 文章链接：${url}\n\n${markdown}`;
         }
 
         if (GM_getValue("addArticleTitleToMarkdown")) {
@@ -1003,7 +1007,7 @@
                     const doc = iframe.contentDocument || iframe.contentWindow.document;
 
                     // 调用下载函数
-                    await downloadCSDNArticleToMarkdown(doc.body);
+                    await downloadCSDNArticleToMarkdown(doc.body, false, url);
 
                     // 移除 iframe
                     document.body.removeChild(iframe);
@@ -1033,7 +1037,7 @@
             const parser = new DOMParser();
             const doc = parser.parseFromString(text, "text/html");
             // 调用下载函数
-            await downloadCSDNArticleToMarkdown(doc.body);
+            await downloadCSDNArticleToMarkdown(doc.body, false, url);
         } else {
             await downloadArticleInIframe(url);
         }
@@ -1174,7 +1178,7 @@
             await downloadCSDNCategoryToMarkdown();
         } else if (url.includes("article/details")) {
             // 文章
-            await downloadCSDNArticleToMarkdown(document.body, GM_getValue("zipCategories"));
+            await downloadCSDNArticleToMarkdown(document.body, GM_getValue("zipCategories"), window.location.href);
             showFloatTip("文章下载完成。", 3000);
         } else if (url.includes("type=blog")) {
             await downloadAllArticlesOfUserToMarkdown();
