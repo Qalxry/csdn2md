@@ -483,11 +483,14 @@
                                         break;
                                     }
                                     if (style.includes("text-align:center")) {
-                                        text = `<div style="text-align:center;">${text}</div>\n\n`;
+                                        // text = `<div style="text-align:center;">${text}</div>\n\n`;
+                                        text = `<div style="text-align:center;">${shrinkHtml(node.innerHTML)}</div>\n\n`;
                                     } else if (style.includes("text-align:right")) {
-                                        text = `<div style="text-align:right;">${text}</div>\n\n`;
+                                        // text = `<div style="text-align:right;">${text}</div>\n\n`;
+                                        text = `<div style="text-align:right;">${shrinkHtml(node.innerHTML)}</div>\n\n`;
                                     } else if (style.includes("text-align:justify")) {
-                                        text = `<div style="text-align:justify;">${text}</div>\n\n`;
+                                        // text = `<div style="text-align:justify;">${text}</div>\n\n`;
+                                        text += "\n\n";
                                     } else {
                                         text += "\n\n";
                                     }
