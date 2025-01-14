@@ -19,6 +19,39 @@
     "use strict";
 
     /**
+     * 可重入异步锁。
+     */
+    class ReentrantAsyncLock {
+        constructor() {
+            this.queue = [];
+            this.locked = false;
+            this.owner = null; // 记录锁的持有者
+        }
+
+        async acquire(ownerId) {
+            if (this.locked && this.owner !== ownerId) {
+                await new Promise((resolve) => this.queue.push(resolve));
+            }
+            this.locked = true;
+            this.owner = ownerId;
+        }
+
+        release(ownerId) {
+            if (this.owner !== ownerId) {
+                throw new Error("Cannot release a lock you do not own");
+            }
+            this.locked = false;
+            this.owner = null;
+            if (this.queue.length > 0) {
+                const resolve = this.queue.shift();
+                resolve();
+                this.locked = true;
+                this.owner = ownerId; // 继续持有锁
+            }
+        }
+    }
+
+    /**
      * 显示悬浮提示框。
      * @param {string} text - 提示框的文本内容。
      */
@@ -74,7 +107,8 @@
 
     // 创建下载按钮
     const downloadButton = document.createElement("button");
-    downloadButton.innerHTML = "下载CSDN文章为Markdown<br>（支持专栏、文章、用户全部文章页面）<br>（推荐使用typora打开下载的Markdown）";
+    downloadButton.innerHTML =
+        "下载CSDN文章为Markdown<br>（支持专栏、文章、用户全部文章页面）<br>（推荐使用typora打开下载的Markdown）";
     downloadButton.style.textAlign = "center";
     downloadButton.style.padding = "5px 10px";
     downloadButton.style.border = "none";
@@ -107,7 +141,7 @@
         });
     }
 
-    function addOption(id, innerHTML, defaultValue = false, constraints = {true: null, false: null}) {
+    function addOption(id, innerHTML, defaultValue = false, constraints = { true: null, false: null }) {
         if (GM_getValue(id) === undefined) {
             GM_setValue(id, defaultValue);
         }
@@ -156,11 +190,13 @@
     addOption("parallelDownload", "批量并行下载模式（下载乱序，但可以添加前缀弥补）", false);
     addOption("fastDownload", "批量高速下载模式（有代码块语言无法识别等问题，能接受就开）", false);
     addOption("addSerialNumber", "批量文章文件加入序号前缀", false);
-    addOption("zipCategories", "下载为压缩包", true, {false: [{id: "saveWebImages", value: false}]});
+    addOption("zipCategories", "下载为压缩包", true, { false: [{ id: "saveWebImages", value: false }] });
     addOption("addArticleInfoInYaml", "添加文章元信息（以YAML元信息格式）", false);
     addOption("addArticleTitleToMarkdown", "添加文章标题（以一级标题形式）", true);
     addOption("addArticleInfoInBlockquote", "添加阅读量、点赞等信息（以引用块形式）", true);
-    addOption("saveWebImages", "将图片保存到与MD文件同名的文件夹内，以相对路径使用", true, {true: [{id: "zipCategories", value: true}]});
+    addOption("saveWebImages", "将图片保存到与MD文件同名的文件夹内，以相对路径使用", true, {
+        true: [{ id: "zipCategories", value: true }],
+    });
     addOption("forceImageCentering", "全部图片居中排版", false);
     addOption("enableImageSize", "启用图片宽高属性（如果网页中的图片具有宽高）", true);
     addOption("removeCSDNSearchLink", "移除CSDN搜索链接", true);
@@ -168,14 +204,19 @@
 
     function enableFloatWindow() {
         downloadButton.disabled = false;
-        downloadButton.innerHTML = "下载CSDN文章为Markdown<br>（支持专栏、文章、用户全部文章页面）<br>（推荐使用typora打开下载的Markdown）";
-        optionCheckBoxList.forEach((optionElem) => {optionElem.disabled = false;});
+        downloadButton.innerHTML =
+            "下载CSDN文章为Markdown<br>（支持专栏、文章、用户全部文章页面）<br>（推荐使用typora打开下载的Markdown）";
+        optionCheckBoxList.forEach((optionElem) => {
+            optionElem.disabled = false;
+        });
     }
 
     function disableFloatWindow() {
         downloadButton.disabled = true;
         downloadButton.innerHTML = "正在下载，请稍候...";
-        optionCheckBoxList.forEach((optionElem) => {optionElem.disabled = true;});
+        optionCheckBoxList.forEach((optionElem) => {
+            optionElem.disabled = true;
+        });
     }
 
     async function testMain() {
@@ -193,7 +234,7 @@
     document.body.appendChild(floatWindow);
 
     // 监听窗口的 focus 事件
-    window.addEventListener('focus', function() {
+    window.addEventListener("focus", function () {
         // 脚本选项可能在其他窗口中被修改，所以每次窗口获得焦点时都要重新加载
         updateAllOptions();
     });
@@ -237,7 +278,7 @@
                 ""
             );
     }
-    
+
     /**
      * 依靠油猴脚本的 GM_xmlhttpRequest 方法获取网络资源。
      * @param {string} url - 网络资源的 URL。
@@ -246,19 +287,19 @@
     async function fetchImageAsBlob(url) {
         return new Promise((resolve, reject) => {
             GM_xmlhttpRequest({
-                method: 'GET',
+                method: "GET",
                 url: url,
-                responseType: 'blob',
-                onload: function(response) {
+                responseType: "blob",
+                onload: function (response) {
                     if (response.status === 200) {
                         resolve(response.response);
                     } else {
                         reject(`Failed to fetch resource: ${url}`);
                     }
                 },
-                onerror: function() {
+                onerror: function () {
                     reject(`Error fetching resource: ${url}`);
-                }
+                },
             });
         });
     }
@@ -295,7 +336,7 @@
             window.imageSet[articleTitle] = {};
             window.imageCount[articleTitle] = 0;
         }
-        
+
         // 检查是否已保存过该图片
         if (window.imageSet[articleTitle][imgUrl]) {
             return window.imageSet[articleTitle][imgUrl];
@@ -307,7 +348,7 @@
         // 获取图片的 Blob 对象
         const blob = await fetchImageAsBlob(imgUrl);
 
-        let ext = imgUrl.split('.').pop();
+        let ext = imgUrl.split(".").pop();
         const allowedExt = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "ico", "avif"];
         if (!allowedExt.includes(ext)) {
             console.warn(`[saveWebImageToLocal] Unsupported image format: ${ext}`);
@@ -326,7 +367,6 @@
         // 返回本地路径
         return `./${filename}`;
     }
-
 
     /**
      * 将文件名转换为安全的文件名。（路径名中不允许的字符都替换为其对应的全角字符）
@@ -352,24 +392,9 @@
      * @param {string} content
      * @param {string} filename
      */
-    async function saveTextAsFile(content, filename, setCount = -1) {
-        if (setCount !== -1) {
-            saveTextAsFile.count = setCount;
-            return;
-        }
+    async function saveTextAsFile(content, filename) {
         filename = safeFilename(filename);
-        if (GM_getValue("addSerialNumber")) {
-            if (saveTextAsFile.count !== undefined) {
-                // filename = `${saveTextAsFile.count.toString().padStart(3, "0")}_${filename}`;
-                filename = `${saveTextAsFile.count}_${filename}`;
-                saveTextAsFile.count--;
-            }
-        }
         if (GM_getValue("zipCategories")) {
-            // if (saveTextAsFile.queue === undefined) {
-            //     saveTextAsFile.queue = [];
-            // }
-            // saveTextAsFile.queue.push({ text, filename });
             // 保存到队列中，等待打包
             fileQueue.push({ filename, type: "text/plain", content });
             return;
@@ -386,14 +411,6 @@
     }
 
     /**
-     * 获取当前文章的序号。
-     * @returns {number} - 当前文章的序号。
-     */
-    function getCurrentArticleIndex() {
-        return saveTextAsFile.count;
-    }
-
-    /**
      * 从 queue 中，将所有 text 转换为 md 文件，并放入文件夹中，然后将文件夹打包为 zip 文件，最后下载 zip 文件。
      * @param {string} zipName - zip 文件名。
      * @returns {Promise<void>}
@@ -407,14 +424,14 @@
         // 创建 JSZip 实例
         const zip = new JSZip();
 
-        fileQueue.forEach(file => {
+        fileQueue.forEach((file) => {
             // 将文件添加到 ZIP 中
             zip.file(file.filename, file.content);
-        })
+        });
 
         // 生成 ZIP 文件
         zip.generateAsync({ type: "blob" })
-            .then(blob => {
+            .then((blob) => {
                 // 创建下载链接
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
@@ -424,10 +441,10 @@
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-    
+
                 fileQueue = [];
             })
-            .catch(error => {
+            .catch((error) => {
                 console.error("Error generating ZIP file:", error);
             });
     }
@@ -484,7 +501,9 @@
                                     }
                                     if (style.includes("text-align:center")) {
                                         // text = `<div style="text-align:center;">${text}</div>\n\n`;
-                                        text = `<div style="text-align:center;">${shrinkHtml(node.innerHTML)}</div>\n\n`;
+                                        text = `<div style="text-align:center;">${shrinkHtml(
+                                            node.innerHTML
+                                        )}</div>\n\n`;
                                     } else if (style.includes("text-align:right")) {
                                         // text = `<div style="text-align:right;">${text}</div>\n\n`;
                                         text = `<div style="text-align:right;">${shrinkHtml(node.innerHTML)}</div>\n\n`;
@@ -528,7 +547,10 @@
                                     break;
                                 }
                                 const text = await processChildren(node, listLevel);
-                                if (href.includes("https://so.csdn.net/so/search") && GM_getValue("removeCSDNSearchLink")) {
+                                if (
+                                    href.includes("https://so.csdn.net/so/search") &&
+                                    GM_getValue("removeCSDNSearchLink")
+                                ) {
                                     result += `${text}`;
                                     break;
                                 }
@@ -628,7 +650,7 @@
                             result += `  \n`;
                             break;
                         case "table":
-                            result += await processTable(node) + "\n\n";
+                            result += (await processTable(node)) + "\n\n";
                             break;
                         // case 'iframe':
                         //     {
@@ -701,7 +723,10 @@
                                     }
                                 }
                                 const style = node.getAttribute("style") || "";
-                                if ((style.includes("background-color") || style.includes("color")) && GM_getValue("enableColorText")) {
+                                if (
+                                    (style.includes("background-color") || style.includes("color")) &&
+                                    GM_getValue("enableColorText")
+                                ) {
                                     result += `<span style="${style}">${await processChildren(node, listLevel)}</span>`;
                                 } else {
                                     result += await processChildren(node, listLevel);
@@ -769,7 +794,7 @@
                             // 自定义列表，懒得解析了，直接用 html 吧
                             result += `${shrinkHtml(node.outerHTML)}\n\n`;
                             break;
-                        case 'abbr':
+                        case "abbr":
                             result += `${shrinkHtml(node.outerHTML)}`;
                             break;
                         default:
@@ -931,9 +956,13 @@
      * @param {Document} doc_body - 文章的 body 元素。
      * @returns {Promise<void>} - 下载完成后的 Promise 对象。
      */
-    async function downloadCSDNArticleToMarkdown(doc_body, getZip = false, url = "") {
+    async function downloadCSDNArticleToMarkdown(doc_body, getZip = false, url = "", prefix = "") {
         const articleTitle = doc_body.querySelector("#articleContentId")?.textContent.trim() || "未命名文章";
-        const articleInfo = doc_body.querySelector(".bar-content")?.textContent.replace(/\s{2,}/g, " ").trim() || "";
+        const articleInfo =
+            doc_body
+                .querySelector(".bar-content")
+                ?.textContent.replace(/\s{2,}/g, " ")
+                .trim() || "";
         const htmlInput = doc_body.querySelector("#content_views");
         if (!htmlInput) {
             alert("未找到文章内容。");
@@ -947,11 +976,7 @@
             url = window.location.href;
         }
 
-        let serialNumber = "";
-        if (GM_getValue("addSerialNumber")) {
-            serialNumber = `${getCurrentArticleIndex()}_`;
-        }
-        let markdown = await htmlToMarkdown(htmlInput, serialNumber + articleTitle);
+        let markdown = await htmlToMarkdown(htmlInput, `${prefix}${articleTitle}`);
 
         if (GM_getValue("addArticleInfoInBlockquote")) {
             markdown = `> ${articleInfo}\n> 文章链接：${url}\n\n${markdown}`;
@@ -960,12 +985,14 @@
         if (GM_getValue("addArticleTitleToMarkdown")) {
             markdown = `# ${articleTitle}\n\n${markdown}`;
         }
-        
+
         if (GM_getValue("addArticleInfoInYaml")) {
             const article_info_box = doc_body.querySelector(".article-info-box");
             const meta_title = articleTitle;
             // 文字文字 YYYY-MM-DD HH:MM:SS 文字文字
-            const meta_date = article_info_box.querySelector(".time")?.textContent.match(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/)[0] || "";
+            const meta_date =
+                article_info_box.querySelector(".time")?.textContent.match(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/)[0] ||
+                "";
             let articleMeta = `title: ${meta_title}\ndate: ${meta_date}\n`;
 
             // 文章分类
@@ -975,14 +1002,16 @@
                 meta_category_and_tags.shift();
             }
             if (meta_category_and_tags.length > 0 && article_info_box.textContent.includes("文章标签")) {
-                articleMeta += `tags:\n${Array.from(meta_category_and_tags).map((tag) => `- ${tag.textContent}`).join("\n")}\n`;
+                articleMeta += `tags:\n${Array.from(meta_category_and_tags)
+                    .map((tag) => `- ${tag.textContent}`)
+                    .join("\n")}\n`;
             }
             markdown = `---\n${articleMeta}---\n\n${markdown}`;
         }
 
         // markdown = `# ${articleTitle}\n\n> ${articleInfo}\n\n${markdown}`;
-        
-        await saveTextAsFile(markdown, `${articleTitle}.md`);
+
+        await saveTextAsFile(markdown, `${prefix}${articleTitle}.md`);
         if (getZip) {
             await saveAllFileToZip(`${articleTitle}`);
         }
@@ -993,7 +1022,7 @@
      * @param {string} url - 文章的 URL。
      * @returns {Promise<void>} - 下载完成后的 Promise 对象。
      */
-    async function downloadArticleInIframe(url) {
+    async function downloadArticleInIframe(url, prefix = "") {
         return new Promise((resolve, reject) => {
             // 创建一个隐藏的 iframe
             const iframe = document.createElement("iframe");
@@ -1007,7 +1036,7 @@
                     const doc = iframe.contentDocument || iframe.contentWindow.document;
 
                     // 调用下载函数
-                    await downloadCSDNArticleToMarkdown(doc.body, false, url);
+                    await downloadCSDNArticleToMarkdown(doc.body, false, url, prefix);
 
                     // 移除 iframe
                     document.body.removeChild(iframe);
@@ -1030,16 +1059,19 @@
         });
     }
 
-    async function downloadArticleFromCategory(url) {
+    async function downloadArticleFromCategory(url, prefix = "") {
+        if (!GM_getValue("addSerialNumber")) {
+            prefix = "";
+        }
         if (GM_getValue("fastDownload")) {
             const response = await fetch(url);
             const text = await response.text();
             const parser = new DOMParser();
             const doc = parser.parseFromString(text, "text/html");
             // 调用下载函数
-            await downloadCSDNArticleToMarkdown(doc.body, false, url);
+            await downloadCSDNArticleToMarkdown(doc.body, false, url, prefix);
         } else {
-            await downloadArticleInIframe(url);
+            await downloadArticleInIframe(url, prefix);
         }
     }
 
@@ -1049,55 +1081,53 @@
      */
     async function downloadCSDNCategoryToMarkdown() {
         // 获取专栏 id，注意 url 可能是 /category_数字.html 或 /category_数字_数字.html，需要第一个数字
-        showFloatTip("开始下载专栏文章...");
+        showFloatTip("正在获取专栏的全部文章链接...");
         const base_url = window.location.href;
         const category_id = base_url.match(/category_(\d+)(?:_\d+)?\.html/)[1];
+        
+        const url_list = [];
         let page = 1;
-        const original_html = document.body.innerHTML;
-
-        if (GM_getValue("addSerialNumber")) {
-            const column_data = document.querySelector(".column_data").textContent;
-            // 匹配：文章数：count\n
-            const count = column_data.match(/文章数：(\d+)/)[1];
-            await saveTextAsFile(count, "count.txt", count);
-        }
         let doc_body = document.body;
         while (true) {
+            let hasNextArticle = false;
             // 获取当前页面的文章列表
-            const url_list = [];
             doc_body.querySelector(".column_article_list").querySelectorAll("a").forEach((item) => {
                 url_list.push(item.href);
+                hasNextArticle = true;
             });
-
-            if (url_list.length === 0) {
-                break;
-            }
-
-            // 下载每篇文章
-            if (GM_getValue("parallelDownload")) {
-                await Promise.all(url_list.map((url) => downloadArticleFromCategory(url)));
-            } else {
-                for (const url of url_list) {
-                    await downloadArticleFromCategory(url);
-                }
-            }
-
+            if (!hasNextArticle) break;
             // 下一页
             page++;
             const next_url = base_url.replace(/category_\d+(?:_\d+)?\.html/, `category_${category_id}_${page}.html`);
             const response = await fetch(next_url);
             const text = await response.text();
-            // document.body.innerHTML = text; // 更新页面内容
             const parser = new DOMParser();
             doc_body = parser.parseFromString(text, "text/html").body;
         }
-        // document.body.innerHTML = original_html; // 恢复原始页面内容
+        if (url_list.length === 0) {
+            showFloatTip("没有找到文章。");
+            return;
+        } else {
+            showFloatTip(`找到 ${url_list.length} 篇文章。开始下载...（预计时间：${Math.round(url_list.length * 0.6)} 秒）`);
+        }
+        
+        // 下载每篇文章
+        const prefixMaxLength = url_list.length.toString().length;
+        if (GM_getValue("parallelDownload")) {
+            await Promise.all(url_list.map((url, index) => downloadArticleFromCategory(url, `${String(url_list.length - index).padStart(prefixMaxLength, '0')}_`)));
+        } else {
+            for (let i = 0; i < url_list.length; i++) {
+                await downloadArticleFromCategory(url_list[i], `${String(url_list.length - i).padStart(prefixMaxLength, '0')}_`);
+            }
+        }
 
         if (GM_getValue("zipCategories")) {
             await saveAllFileToZip(`${document.title}`);
+            showFloatTip(`专栏文章全部处理完毕，请等待打包。（预计时间： ${Math.round(url_list.length * 0.25)} 秒）`, url_list.length * 250);
+        } else {
+            showFloatTip("专栏文章全部处理完毕，请等待下载结束。", 3000);
         }
 
-        showFloatTip("专栏文章全部下载完成。", 3000);
     }
 
     /**
@@ -1105,16 +1135,10 @@
      * @returns {Promise<void>} - 下载完成后的 Promise 对象。
      */
     async function downloadAllArticlesOfUserToMarkdown() {
-        showFloatTip("开始下载用户全部文章。可能需要进行多次页面滚动以获取全部文章链接，请耐心等待。");
+        showFloatTip("正在获取用户全部文章链接。可能需要进行多次页面滚动，请耐心等待。");
 
-        const mainContent = document.body.querySelector(".mainContent")
-        const navListData = document.body.querySelector(".navList").textContent;
-        const articleCount = navListData.match(/文章(\d+)/)[1];
+        const mainContent = document.body.querySelector(".mainContent");
 
-        if (GM_getValue("addSerialNumber")) {
-            await saveTextAsFile(null, null, articleCount);
-        }
-        
         const url_list = [];
         const url_set = new Set();
 
@@ -1123,7 +1147,7 @@
             await new Promise((resolve) => setTimeout(resolve, 2000));
             window.scrollTo({
                 top: document.body.scrollHeight,
-                behavior: 'smooth' // 可选，使滚动平滑
+                behavior: "smooth", // 可选，使滚动平滑
             });
             let end = true;
             mainContent.querySelectorAll("article").forEach((item) => {
@@ -1140,27 +1164,32 @@
         // 滚回顶部
         window.scrollTo({
             top: 0,
-            behavior: 'smooth' // 可选，使滚动平滑
+            behavior: "smooth", // 可选，使滚动平滑
         });
 
         if (url_list.length === 0) {
             showFloatTip("没有找到文章。");
+        } else {
+            showFloatTip(`找到 ${url_list.length} 篇文章。开始下载...（预计时间：${Math.round(url_list.length * 0.6)} 秒）`);
         }
 
         // 下载每篇文章
+        const prefixMaxLength = url_list.length.toString().length;
         if (GM_getValue("parallelDownload")) {
-            await Promise.all(url_list.map((url) => downloadArticleFromCategory(url)));
+            await Promise.all(url_list.map((url, index) => downloadArticleFromCategory(url, `${String(url_list.length - index).padStart(prefixMaxLength, '0')}_`)));
         } else {
-            for (const url of url_list) {
-                await downloadArticleFromCategory(url);
+            for (let i = 0; i < url_list.length; i++) {
+                await downloadArticleFromCategory(url_list[i], `${String(url_list.length - i).padStart(prefixMaxLength, '0')}_`);
             }
         }
 
         if (GM_getValue("zipCategories")) {
             await saveAllFileToZip(`${document.title}`);
+            showFloatTip(`用户全部文章处理完毕，请等待打包。（预计时间： ${Math.round(url_list.length * 0.25)} 秒）`, url_list.length * 250);
+        } else {
+            showFloatTip("用户全部文章处理完毕，请等待下载结束。", 3000);
         }
 
-        showFloatTip("用户全部文章下载完成。", 3000);
     }
 
     /**
@@ -1182,7 +1211,6 @@
             showFloatTip("文章下载完成。", 3000);
         } else if (url.includes("type=blog")) {
             await downloadAllArticlesOfUserToMarkdown();
-            showFloatTip("用户全部文章下载完成。", 3000);
         } else {
             alert("无法识别的页面。");
         }
