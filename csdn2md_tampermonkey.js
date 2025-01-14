@@ -1059,7 +1059,7 @@
         });
     }
 
-    async function downloadArticleFromCategory(url, prefix = "") {
+    async function downloadArticleFromBatchURL(url, prefix = "") {
         if (!GM_getValue("addSerialNumber")) {
             prefix = "";
         }
@@ -1114,10 +1114,10 @@
         // 下载每篇文章
         const prefixMaxLength = url_list.length.toString().length;
         if (GM_getValue("parallelDownload")) {
-            await Promise.all(url_list.map((url, index) => downloadArticleFromCategory(url, `${String(url_list.length - index).padStart(prefixMaxLength, '0')}_`)));
+            await Promise.all(url_list.map((url, index) => downloadArticleFromBatchURL(url, `${String(url_list.length - index).padStart(prefixMaxLength, '0')}_`)));
         } else {
             for (let i = 0; i < url_list.length; i++) {
-                await downloadArticleFromCategory(url_list[i], `${String(url_list.length - i).padStart(prefixMaxLength, '0')}_`);
+                await downloadArticleFromBatchURL(url_list[i], `${String(url_list.length - i).padStart(prefixMaxLength, '0')}_`);
             }
         }
 
@@ -1176,10 +1176,10 @@
         // 下载每篇文章
         const prefixMaxLength = url_list.length.toString().length;
         if (GM_getValue("parallelDownload")) {
-            await Promise.all(url_list.map((url, index) => downloadArticleFromCategory(url, `${String(url_list.length - index).padStart(prefixMaxLength, '0')}_`)));
+            await Promise.all(url_list.map((url, index) => downloadArticleFromBatchURL(url, `${String(url_list.length - index).padStart(prefixMaxLength, '0')}_`)));
         } else {
             for (let i = 0; i < url_list.length; i++) {
-                await downloadArticleFromCategory(url_list[i], `${String(url_list.length - i).padStart(prefixMaxLength, '0')}_`);
+                await downloadArticleFromBatchURL(url_list[i], `${String(url_list.length - i).padStart(prefixMaxLength, '0')}_`);
             }
         }
 
