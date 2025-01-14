@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      1.1.7
+// @version      1.1.8
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -325,7 +325,8 @@
         }
 
         // 去除 #pic_center
-        imgUrl = imgUrl.replace("#pic_center", "");
+        // imgUrl = imgUrl.replace("#pic_center", "");
+        imgUrl = imgUrl.replace(/[?#@!$&'()*+,;=].*$/, ''); // 去除 URL 中的参数
 
         // 用于记录当前文章中的图片数量
         if (!window.imageCount) {
@@ -679,7 +680,8 @@
                                     const customTitle = node.querySelector("h4").textContent || "";
                                     result += `**${customTitle}**\n\n[TOC]\n\n`;
                                 } else {
-                                    result += await processChildren(node, listLevel);
+                                    // result += await processChildren(node, listLevel);
+                                    result += `${await processChildren(node, listLevel)}\n`;
                                 }
                             }
                             break;
@@ -975,6 +977,7 @@
         if (url === "") {
             url = window.location.href;
         }
+        url = url.replace(/[?#@!$&'()*+,;=].*$/, '');
 
         let markdown = await htmlToMarkdown(htmlInput, `${prefix}${articleTitle}`);
 
