@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      1.1.8
+// @version      1.2.0
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -22,14 +22,20 @@
      * 可重入异步锁。
      */
     class ReentrantAsyncLock {
-        constructor() {
+        constructor(enableReentrant = true) {
             this.queue = [];
             this.locked = false;
-            this.owner = null; // 记录锁的持有者
+            this.owner = null; // 记录锁的持有者，用于重入
+            this.enableReentrant = enableReentrant;
         }
 
-        async acquire(ownerId) {
-            if (this.locked && this.owner !== ownerId) {
+        async acquire(ownerId = null) {
+            if (this.locked) {
+                // 如果允许重入，且当前持有者是 ownerId，则直接返回
+                if (this.enableReentrant && this.owner === ownerId) {
+                    return;
+                }
+                // 否则加入队列等待
                 await new Promise((resolve) => this.queue.push(resolve));
             }
             this.locked = true;
@@ -37,7 +43,7 @@
         }
 
         release(ownerId) {
-            if (this.owner !== ownerId) {
+            if (this.enableReentrant && this.owner !== ownerId) {
                 throw new Error("Cannot release a lock you do not own");
             }
             this.locked = false;
@@ -141,7 +147,7 @@
         });
     }
 
-    function addOption(id, innerHTML, defaultValue = false, constraints = { true: null, false: null }) {
+    function addOption(id, innerHTML, defaultValue = false, constraints = {}) {
         if (GM_getValue(id) === undefined) {
             GM_setValue(id, defaultValue);
         }
@@ -166,7 +172,7 @@
         optionCheckbox.addEventListener("change", function () {
             GM_setValue(id, optionCheckbox.checked);
             if (optionCheckbox.checked) {
-                if (constraints.true !== null) {
+                if (constraints.true) {
                     for (const constraint of constraints.true) {
                         if (constraint.id !== undefined && constraint.value !== undefined) {
                             GM_setValue(constraint.id, constraint.value);
@@ -175,7 +181,7 @@
                     updateAllOptions();
                 }
             } else {
-                if (constraints.false !== null) {
+                if (constraints.false) {
                     for (const constraint of constraints.false) {
                         if (constraint.id !== undefined && constraint.value !== undefined) {
                             GM_setValue(constraint.id, constraint.value);
@@ -201,6 +207,15 @@
     addOption("enableImageSize", "启用图片宽高属性（如果网页中的图片具有宽高）", true);
     addOption("removeCSDNSearchLink", "移除CSDN搜索链接", true);
     addOption("enableColorText", "启用彩色文字（以span形式保存）", true);
+    addOption("mergeArticleContent", "合并批量文章内容（以一篇文章的形式保存）", false, {
+        true: [
+            { id: "zipCategories", value: true },
+            { id: "addArticleInfoInYaml", value: false },
+            // { id: "addArticleInfoInBlockquote", value: false },
+        ],
+    });
+    addOption("addSerialNumberToTitle", "添加序号到标题前缀（建议在合并文章时开启）", false);
+    addOption("addArticleInfoInBlockquote_batch", "合并文章时添加阅读量、点赞等信息（以引用块形式）", true);
 
     function enableFloatWindow() {
         downloadButton.disabled = false;
@@ -279,6 +294,10 @@
             );
     }
 
+    function clearUrl(url) {
+        return url.replace(/[?#@!$&'()*+,;=].*$/, "");
+    }
+
     /**
      * 依靠油猴脚本的 GM_xmlhttpRequest 方法获取网络资源。
      * @param {string} url - 网络资源的 URL。
@@ -306,12 +325,17 @@
 
     /**
      * 将网络图片添加到 fileQueue { filename, content, type }，并返回本地路径。
-     * 会将图片名称改为 articleTitle/count.后缀 的形式，这样在添加图片到 zip 的时候就会自动创建文件夹。
+     * 会将图片名称改为 mdAssetDirName/count.后缀 的形式，这样在添加图片到 zip 的时候就会自动创建文件夹。
      * @param {string} imgUrl - 图片的网络路径。
-     * @param {string} articleTitle - 文章标题。
-     * @returns {Promise<string>} - 本地路径，格式为 ./articleTitle/图片名 。
+     * @param {string} mdAssetDirName - 文章标题。
+     * @returns {Promise<string>} - 本地路径，格式为 ./mdAssetDirName/图片名 。
      */
-    async function saveWebImageToLocal(imgUrl, articleTitle, reset = false) {
+    const saveWebImageToLocal_lock = new ReentrantAsyncLock(false);
+    async function saveWebImageToLocal(imgUrl, mdAssetDirName, reset = false) {
+        if (GM_getValue("mergeArticleContent")) {
+            // 避免多篇文章合并时，异步操作导致索引错乱，所以加锁
+            await saveWebImageToLocal_lock.acquire();
+        }
         if (reset) {
             window.imageCount = {};
             window.imageSet = {};
@@ -326,29 +350,27 @@
 
         // 去除 #pic_center
         // imgUrl = imgUrl.replace("#pic_center", "");
-        imgUrl = imgUrl.replace(/[?#@!$&'()*+,;=].*$/, ''); // 去除 URL 中的参数
+        // imgUrl = imgUrl.replace(/[?#@!$&'()*+,;=].*$/, ""); // 去除 URL 中的参数
+        imgUrl = clearUrl(imgUrl);
 
-        // 用于记录当前文章中的图片数量
+        // 初始化
         if (!window.imageCount) {
             window.imageCount = {};
             window.imageSet = {};
         }
-        if (!window.imageCount[articleTitle]) {
-            window.imageSet[articleTitle] = {};
-            window.imageCount[articleTitle] = 0;
+        if (!window.imageCount[mdAssetDirName]) {
+            window.imageSet[mdAssetDirName] = {};
+            window.imageCount[mdAssetDirName] = 0;
         }
 
         // 检查是否已保存过该图片
-        if (window.imageSet[articleTitle][imgUrl]) {
-            return window.imageSet[articleTitle][imgUrl];
+        if (window.imageSet[mdAssetDirName][imgUrl]) {
+            return window.imageSet[mdAssetDirName][imgUrl];
         }
 
         // 记录图片数量
-        window.imageCount[articleTitle]++;
-
-        // 获取图片的 Blob 对象
-        const blob = await fetchImageAsBlob(imgUrl);
-
+        window.imageCount[mdAssetDirName]++;
+        const index = window.imageCount[mdAssetDirName];
         let ext = imgUrl.split(".").pop();
         const allowedExt = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "ico", "avif"];
         if (!allowedExt.includes(ext)) {
@@ -357,13 +379,22 @@
         } else {
             ext = `.${ext}`;
         }
+        const filename = `${mdAssetDirName}/${index}${ext}`;
+        
+        // 记录已保存的图片
+        window.imageSet[mdAssetDirName][imgUrl] = `./${filename}`;
+
+        // 释放锁
+        if (GM_getValue("mergeArticleContent")) {
+            saveWebImageToLocal_lock.release();
+        }
+
+        // 获取图片的 Blob 对象
+        const blob = await fetchImageAsBlob(imgUrl);
+
 
         // 生成文件名
-        const filename = `${articleTitle}/${window.imageCount[articleTitle]}${ext}`;
-        fileQueue.push({ filename, content: blob, type: blob.type });
-
-        // 记录已保存的图片
-        window.imageSet[articleTitle][imgUrl] = `./${filename}`;
+        fileQueue.push({ filename, content: blob, type: blob.type, index: index });
 
         // 返回本地路径
         return `./${filename}`;
@@ -393,11 +424,11 @@
      * @param {string} content
      * @param {string} filename
      */
-    async function saveTextAsFile(content, filename) {
+    async function saveTextAsFile(content, filename, index = 0) {
         filename = safeFilename(filename);
-        if (GM_getValue("zipCategories")) {
+        if (GM_getValue("zipCategories") || GM_getValue("mergeArticleContent")) {
             // 保存到队列中，等待打包
-            fileQueue.push({ filename, type: "text/plain", content });
+            fileQueue.push({ filename, type: "text/plain", content, index });
             return;
         }
         const blob = new Blob([content], { type: "text/plain" });
@@ -405,6 +436,50 @@
         const a = document.createElement("a");
         a.href = url;
         a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    function mergeArticleContent(mergeName, extraPrefix = "") {
+        // 检查队列是否只有一个 md 文件
+        let mdCount = 0;
+        fileQueue.forEach((file) => {
+            if (file.type === "text/plain") {
+                mdCount++;
+            }
+        });
+        if (mdCount <= 1) {
+            return;
+        }
+        // 合并文章内容
+        let mergedContent = "";
+        const textArray = [];
+        const newFileQueue = [];
+        fileQueue.forEach((file) => {
+            if (file.type === "text/plain") {
+                textArray.push({ content: file.content, index: file.index });
+            } else {
+                newFileQueue.push(file);
+            }
+        });
+
+        // 按照 index 排序
+        textArray.sort((a, b) => a.index - b.index);
+        mergedContent = textArray.map((item) => item.content).join("\n\n\n\n");
+
+        newFileQueue.push({ filename: `${mergeName}.md`, type: "text/plain", content: `${extraPrefix}${mergedContent}` });
+        fileQueue = newFileQueue;
+    }
+
+    function downloadMergedArticle() {
+        const content = fileQueue.pop();
+        const blob = new Blob([content.content], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = content.filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -424,12 +499,10 @@
         zipName = safeFilename(zipName);
         // 创建 JSZip 实例
         const zip = new JSZip();
-
         fileQueue.forEach((file) => {
             // 将文件添加到 ZIP 中
             zip.file(file.filename, file.content);
         });
-
         // 生成 ZIP 文件
         zip.generateAsync({ type: "blob" })
             .then((blob) => {
@@ -453,10 +526,10 @@
     /**
      * 将 HTML 内容转换为 Markdown 格式。
      * @param {Element} articleElement - 文章的 DOM 元素。
-     * @param {string} markdownFileName - Markdown 文件名。
+     * @param {string} mdAssetDirName - Markdown 文件中的图片文件夹名称。
      * @returns {Promise<string>} - 转换后的 Markdown 字符串。
      */
-    async function htmlToMarkdown(articleElement, markdownFileName = "") {
+    async function htmlToMarkdown(articleElement, mdAssetDirName = "", enableTOC = true) {
         // 辅助函数，用于转义特殊的 Markdown 字符
         const escapeMarkdown = (text) => {
             // return text.replace(/([\\`*_\{\}\[\]()#+\-.!])/g, "\\$1").trim();
@@ -492,7 +565,9 @@
                             {
                                 const style = node.getAttribute("style");
                                 if (node.getAttribute("id") === "main-toc") {
-                                    result += `**目录**\n\n[TOC]\n\n`;
+                                    if (enableTOC) {
+                                        result += `**目录**\n\n[TOC]\n\n`;
+                                    }
                                     break;
                                 }
                                 let text = await processChildren(node, listLevel);
@@ -575,7 +650,7 @@
                                         result += " ";
                                     }
                                     if (GM_getValue("saveWebImages")) {
-                                        src = await saveWebImageToLocal(src, markdownFileName);
+                                        src = await saveWebImageToLocal(src, mdAssetDirName);
                                     }
                                     if (width && height && GM_getValue("enableImageSize")) {
                                         // result += `<img src="${src}" alt="${alt}" width="${width}" height="${height}" />`;
@@ -678,7 +753,9 @@
                                     result += `<div align="center" style="border: 3px solid gray;border-radius: 27px;overflow: hidden;"> <a class="link-info" href="${src}" rel="nofollow" title="${title}">${title}</a>${iframeHTML}</div>\n\n`;
                                 } else if (className.includes("toc")) {
                                     const customTitle = node.querySelector("h4").textContent || "";
-                                    result += `**${customTitle}**\n\n[TOC]\n\n`;
+                                    if (enableTOC) {
+                                        result += `**${customTitle}**\n\n[TOC]\n\n`;
+                                    }
                                 } else {
                                     // result += await processChildren(node, listLevel);
                                     result += `${await processChildren(node, listLevel)}\n`;
@@ -960,11 +1037,7 @@
      */
     async function downloadCSDNArticleToMarkdown(doc_body, getZip = false, url = "", prefix = "") {
         const articleTitle = doc_body.querySelector("#articleContentId")?.textContent.trim() || "未命名文章";
-        const articleInfo =
-            doc_body
-                .querySelector(".bar-content")
-                ?.textContent.replace(/\s{2,}/g, " ")
-                .trim() || "";
+        const articleInfo = doc_body.querySelector(".bar-content")?.textContent.replace(/\s{2,}/g, " ").trim() || "";
         const htmlInput = doc_body.querySelector("#content_views");
         if (!htmlInput) {
             alert("未找到文章内容。");
@@ -977,21 +1050,27 @@
         if (url === "") {
             url = window.location.href;
         }
-        url = url.replace(/[?#@!$&'()*+,;=].*$/, '');
+        // url = url.replace(/[?#@!$&'()*+,;=].*$/, "");
+        url = clearUrl(url);
 
-        let markdown = await htmlToMarkdown(htmlInput, `${prefix}${articleTitle}`);
+        let markdown = await htmlToMarkdown(htmlInput, GM_getValue("mergeArticleContent") ? "assets" : `${prefix}${articleTitle}`, !GM_getValue("mergeArticleContent"));
 
         if (GM_getValue("addArticleInfoInBlockquote")) {
             markdown = `> ${articleInfo}\n> 文章链接：${url}\n\n${markdown}`;
         }
 
         if (GM_getValue("addArticleTitleToMarkdown")) {
-            markdown = `# ${articleTitle}\n\n${markdown}`;
+            if (GM_getValue("addSerialNumberToTitle")) {
+                markdown = `# ${prefix}${articleTitle}\n\n${markdown}`;
+            } else {
+                markdown = `# ${articleTitle}\n\n${markdown}`;
+            }
         }
 
         if (GM_getValue("addArticleInfoInYaml")) {
             const article_info_box = doc_body.querySelector(".article-info-box");
-            const meta_title = articleTitle;
+            // 文章标题
+            const meta_title = GM_getValue("addSerialNumberToTitle") ? `${prefix}${articleTitle}` : articleTitle;
             // 文字文字 YYYY-MM-DD HH:MM:SS 文字文字
             const meta_date =
                 article_info_box.querySelector(".time")?.textContent.match(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/)[0] ||
@@ -1014,9 +1093,13 @@
 
         // markdown = `# ${articleTitle}\n\n> ${articleInfo}\n\n${markdown}`;
 
-        await saveTextAsFile(markdown, `${prefix}${articleTitle}.md`);
+        // 从 prefix 中获取序号
+        const index = parseInt(prefix.match(/\d+/)[0]);
+
+        await saveTextAsFile(markdown, `${prefix}${articleTitle}.md`, index);
+
         if (getZip) {
-            await saveAllFileToZip(`${articleTitle}`);
+            await saveAllFileToZip(`${prefix}${articleTitle}`);
         }
     }
 
@@ -1087,17 +1170,20 @@
         showFloatTip("正在获取专栏的全部文章链接...");
         const base_url = window.location.href;
         const category_id = base_url.match(/category_(\d+)(?:_\d+)?\.html/)[1];
-        
+
         const url_list = [];
         let page = 1;
         let doc_body = document.body;
         while (true) {
             let hasNextArticle = false;
             // 获取当前页面的文章列表
-            doc_body.querySelector(".column_article_list").querySelectorAll("a").forEach((item) => {
-                url_list.push(item.href);
-                hasNextArticle = true;
-            });
+            doc_body
+                .querySelector(".column_article_list")
+                .querySelectorAll("a")
+                .forEach((item) => {
+                    url_list.push(item.href);
+                    hasNextArticle = true;
+                });
             if (!hasNextArticle) break;
             // 下一页
             page++;
@@ -1111,26 +1197,58 @@
             showFloatTip("没有找到文章。");
             return;
         } else {
-            showFloatTip(`找到 ${url_list.length} 篇文章。开始下载...（预计时间：${Math.round(url_list.length * 0.6)} 秒）`);
+            showFloatTip(
+                `找到 ${url_list.length} 篇文章。开始下载...（预计时间：${Math.round(url_list.length * 0.6)} 秒）`
+            );
         }
-        
+
         // 下载每篇文章
         const prefixMaxLength = url_list.length.toString().length;
         if (GM_getValue("parallelDownload")) {
-            await Promise.all(url_list.map((url, index) => downloadArticleFromBatchURL(url, `${String(url_list.length - index).padStart(prefixMaxLength, '0')}_`)));
+            await Promise.all(
+                url_list.map((url, index) =>
+                    downloadArticleFromBatchURL(
+                        url,
+                        `${String(url_list.length - index).padStart(prefixMaxLength, "0")}_`
+                    )
+                )
+            );
         } else {
             for (let i = 0; i < url_list.length; i++) {
-                await downloadArticleFromBatchURL(url_list[i], `${String(url_list.length - i).padStart(prefixMaxLength, '0')}_`);
+                await downloadArticleFromBatchURL(
+                    url_list[i],
+                    `${String(url_list.length - i).padStart(prefixMaxLength, "0")}_`
+                );
             }
         }
 
+        let extraPrefix = "";
+        if (GM_getValue("addArticleTitleToMarkdown")) {
+            extraPrefix += `# ${document.title}\n\n`
+        }
+        if (GM_getValue("addArticleInfoInBlockquote_batch")) {
+            const batchTitle = document.body.querySelector(".column_title")?.textContent.trim() || "";
+            const batchDesc = document.body.querySelector(".column_text_desc")?.textContent.trim() || "";
+            const batchColumnData = document.body.querySelector(".column_data")?.textContent.replace(/\s{2,}/g, " ").trim() || "";
+            const batchAuthor = document.body.querySelector(".column_person_tit")?.textContent.replace(/\s{2,}/g, " ").trim() || ""; 
+            const batchUrl = clearUrl(base_url);
+            extraPrefix += `> ${batchDesc}\n> ${batchAuthor} ${batchColumnData}\n${batchUrl}\n\n`
+        }
+        if (GM_getValue("mergeArticleContent")) {
+            mergeArticleContent(`${document.title}`, extraPrefix);
+        }
         if (GM_getValue("zipCategories")) {
             await saveAllFileToZip(`${document.title}`);
-            showFloatTip(`专栏文章全部处理完毕，请等待打包。（预计时间： ${Math.round(url_list.length * 0.25)} 秒）`, url_list.length * 250);
+            showFloatTip(
+                `专栏文章全部处理完毕，请等待打包。（预计时间： ${Math.round(url_list.length * 0.25)} 秒）`,
+                url_list.length * 250
+            );
         } else {
+            if (GM_getValue("mergeArticleContent")) {
+                downloadMergedArticle();
+            }
             showFloatTip("专栏文章全部处理完毕，请等待下载结束。", 3000);
         }
-
     }
 
     /**
@@ -1173,26 +1291,53 @@
         if (url_list.length === 0) {
             showFloatTip("没有找到文章。");
         } else {
-            showFloatTip(`找到 ${url_list.length} 篇文章。开始下载...（预计时间：${Math.round(url_list.length * 0.6)} 秒）`);
+            showFloatTip(
+                `找到 ${url_list.length} 篇文章。开始下载...（预计时间：${Math.round(url_list.length * 0.6)} 秒）`
+            );
         }
 
         // 下载每篇文章
         const prefixMaxLength = url_list.length.toString().length;
         if (GM_getValue("parallelDownload")) {
-            await Promise.all(url_list.map((url, index) => downloadArticleFromBatchURL(url, `${String(url_list.length - index).padStart(prefixMaxLength, '0')}_`)));
+            await Promise.all(
+                url_list.map((url, index) =>
+                    downloadArticleFromBatchURL(
+                        url,
+                        `${String(url_list.length - index).padStart(prefixMaxLength, "0")}_`
+                    )
+                )
+            );
         } else {
             for (let i = 0; i < url_list.length; i++) {
-                await downloadArticleFromBatchURL(url_list[i], `${String(url_list.length - i).padStart(prefixMaxLength, '0')}_`);
+                await downloadArticleFromBatchURL(
+                    url_list[i],
+                    `${String(url_list.length - i).padStart(prefixMaxLength, "0")}_`
+                );
             }
         }
-
+        let extraPrefix = "";
+        if (GM_getValue("addArticleTitleToMarkdown")) {
+            extraPrefix += `# ${document.title}\n\n`
+        }
+        if (GM_getValue("addArticleInfoInBlockquote_batch")) {
+            const batchUrl = clearUrl(window.location.href);
+            extraPrefix += `> ${batchUrl}\n\n`
+        }
+        if (GM_getValue("mergeArticleContent")) {
+            mergeArticleContent(`${document.title}`, extraPrefix);
+        }
         if (GM_getValue("zipCategories")) {
             await saveAllFileToZip(`${document.title}`);
-            showFloatTip(`用户全部文章处理完毕，请等待打包。（预计时间： ${Math.round(url_list.length * 0.25)} 秒）`, url_list.length * 250);
+            showFloatTip(
+                `用户全部文章处理完毕，请等待打包。（预计时间： ${Math.round(url_list.length * 0.25)} 秒）`,
+                url_list.length * 250
+            );
         } else {
+            if (GM_getValue("mergeArticleContent")) {
+                downloadMergedArticle();
+            }
             showFloatTip("用户全部文章处理完毕，请等待下载结束。", 3000);
         }
-
     }
 
     /**
@@ -1210,8 +1355,15 @@
             await downloadCSDNCategoryToMarkdown();
         } else if (url.includes("article/details")) {
             // 文章
-            await downloadCSDNArticleToMarkdown(document.body, GM_getValue("zipCategories"), window.location.href);
+            if (GM_getValue("mergeArticleContent")) {
+                GM_setValue("mergeArticleContent", false);
+                await downloadCSDNArticleToMarkdown(document.body, GM_getValue("zipCategories"), window.location.href);
+                GM_setValue("mergeArticleContent", true);
+            } else {
+                await downloadCSDNArticleToMarkdown(document.body, GM_getValue("zipCategories"), window.location.href);
+            }
             showFloatTip("文章下载完成。", 3000);
+
         } else if (url.includes("type=blog")) {
             await downloadAllArticlesOfUserToMarkdown();
         } else {
