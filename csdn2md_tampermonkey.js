@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      1.2.0
+// @version      1.2.1
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -286,12 +286,49 @@
      * @returns {string} - 清除特殊字符后的字符串。
      */
     function clearSpecialChars(str) {
-        return str
-            .replace(/[\s]{2,}/g, "")
-            .replace(
-                /[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF\u00AD\u034F\u061C\u180E\u2800\u3164\uFFA0\uFFF9-\uFFFB]/g,
-                ""
-            );
+        return (
+            str
+                .replace(/[\s]{2,}/g, "")
+                .replace(
+                    /[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF\u00AD\u034F\u061C\u180E\u2800\u3164\uFFA0\uFFF9-\uFFFB]/g,
+                    ""
+                )
+                // 左花括号
+                .replace("⎧", "")
+                .replace("⎨", "{")
+                .replace("⎩", "")
+                // 右花括号
+                .replace("⎫", "")
+                .replace("⎬", "}")
+                .replace("⎭", "")
+                // 左方括号
+                .replace("⎡", "[")
+                .replace("⎢", "")
+                .replace("⎣", "")
+                // 右方括号
+                .replace("⎤", "]")
+                .replace("⎥", "")
+                .replace("⎦", "")
+        );
+    }
+
+    /**
+     * 根据特征清除 str 中开头的杂乱字符。
+     * @param {string} str
+     */
+    function clearKatexMathML(str) {
+        // split str by at least 10 characters mixed with both line breaks and spaces
+        const strSplit = str.split(/(?=.*\n)(?=.* )[\s\n]{10,}/);
+        // find the str whose length is the longest
+        let maxLen = 0;
+        let maxStr = "";
+        for (const item of strSplit) {
+            if (item.length > maxLen) {
+                maxLen = item.length;
+                maxStr = item;
+            }
+        }
+        return maxStr;
     }
 
     function clearUrl(url) {
@@ -380,7 +417,7 @@
             ext = `.${ext}`;
         }
         const filename = `${mdAssetDirName}/${index}${ext}`;
-        
+
         // 记录已保存的图片
         window.imageSet[mdAssetDirName][imgUrl] = `./${filename}`;
 
@@ -391,7 +428,6 @@
 
         // 获取图片的 Blob 对象
         const blob = await fetchImageAsBlob(imgUrl);
-
 
         // 生成文件名
         fileQueue.push({ filename, content: blob, type: blob.type, index: index });
@@ -469,7 +505,11 @@
         textArray.sort((a, b) => a.index - b.index);
         mergedContent = textArray.map((item) => item.content).join("\n\n\n\n");
 
-        newFileQueue.push({ filename: `${mergeName}.md`, type: "text/plain", content: `${extraPrefix}${mergedContent}` });
+        newFileQueue.push({
+            filename: `${mergeName}.md`,
+            type: "text/plain",
+            content: `${extraPrefix}${mergedContent}`,
+        });
         fileQueue = newFileQueue;
     }
 
@@ -642,7 +682,7 @@
                                 const height = node.getAttribute("height") || "";
 
                                 if (cls.includes("mathcode")) {
-                                    result += `$$\n${alt}\n$$`;
+                                    result += `\n\$\$\n${alt}\n\$\$`;
                                 } else {
                                     if (src.includes("#pic_center") || GM_getValue("forceImageCentering")) {
                                         result += "\n\n";
@@ -655,9 +695,9 @@
                                     if (width && height && GM_getValue("enableImageSize")) {
                                         // result += `<img src="${src}" alt="${alt}" width="${width}" height="${height}" />`;
                                         // result += `<img src="${src}" alt="${alt}" style="max-width:${width}px; max-height:${height}px; box-sizing:content-box;" />`;
-                                        result += `<img src="${src}" alt="${alt}" style="max-height:${height}px; box-sizing:content-box;" />`;
+                                        result += `<img src="${src}" alt="${alt}" style="max-height:${height}px; box-sizing:content-box;" />\n`;
                                     } else {
-                                        result += `![${alt}](${src})`;
+                                        result += `![${alt}](${src})\n`;
                                     }
                                 }
                             }
@@ -766,37 +806,57 @@
                             {
                                 const node_class = node.getAttribute("class");
                                 if (node_class) {
-                                    if (node_class.includes("katex--inline")) {
-                                        // class="katex-mathml"
-                                        const mathml = clearSpecialChars(
-                                            node.querySelector(".katex-mathml").textContent
-                                        );
-                                        const katex_html = clearSpecialChars(
-                                            node.querySelector(".katex-html").textContent
-                                        );
-                                        // result += ` $${mathml.replace(katex_html, "")}$ `;
+                                    if (node_class.includes("katex--inline") || node_class.includes("katex--display")) {
+                                        const katex_mathml_elem = node.querySelector(".katex-mathml");
+                                        const katex_html_elem = node.querySelector(".katex-html");
+                                        if (katex_mathml_elem !== null && katex_html_elem !== null) {
+                                            // 移除 .katex-mathml 里的 .MathJax_Display 类，否则会造成错乱
+                                            if (katex_mathml_elem.querySelector(".MathJax_Display") && katex_mathml_elem.querySelector("script")) {
+                                                katex_mathml_elem.querySelectorAll(".MathJax_Display").forEach((elem) => elem.remove());
+                                            }
+                                            if (katex_mathml_elem.querySelector(".MathJax_Preview") && katex_mathml_elem.querySelector("script")) {
+                                                katex_mathml_elem.querySelectorAll(".MathJax_Preview").forEach((elem) => elem.remove());
+                                            }
+                                            if (katex_mathml_elem.querySelector(".MathJax_Error") && katex_mathml_elem.querySelector("script")) {
+                                                katex_mathml_elem.querySelectorAll(".MathJax_Error").forEach((elem) => elem.remove());
+                                            }
 
-                                        if (mathml.startsWith(katex_html)) {
-                                            result += ` $${mathml.replace(katex_html, "")}$ `;
-                                        } else {
-                                            // 字符串切片，去掉 mathml 开头等同长度的 katex_html，注意不能用 replace，因为 katex_html 里的字符顺序可能会变
-                                            result += ` $${mathml.slice(katex_html.length)}$ `;
-                                        }
-                                        break;
-                                    } else if (node_class.includes("katex--display")) {
-                                        const mathml = clearSpecialChars(
-                                            node.querySelector(".katex-mathml").textContent
-                                        );
-                                        const katex_html = clearSpecialChars(
-                                            node.querySelector(".katex-html").textContent
-                                        );
-                                        // result += `$$\n${mathml.replace(katex_html, "")}\n$$\n\n`;
+                                            // // 清除 .katex-mathml 里除了 script 和 #text 之外的所有元素
+                                            // if (katex_mathml_elem.querySelector("script")) {
+                                            //     katex_mathml_elem.childNodes.forEach((elem) => {
+                                            //         if (elem.tagName !== "script" && elem.nodeType !== 3) {
+                                            //             elem.remove();
+                                            //         }
+                                            //     });
+                                            // }
 
-                                        if (mathml.startsWith(katex_html)) {
-                                            result += `$$\n${mathml.replace(katex_html, "")}\n$$\n\n`;
-                                        } else {
-                                            // 字符串切片，去掉 mathml 开头等同长度的 katex_html，注意不能用 replace，因为 katex_html 里的字符顺序可能会变
-                                            result += `$$\n${mathml.slice(katex_html.length)}\n$$\n\n`;
+                                            const mathml = clearSpecialChars(katex_mathml_elem.textContent);
+                                            const katex_html = clearSpecialChars(katex_html_elem.textContent);
+                                            if (node_class.includes("katex--inline")) {
+                                                if (mathml.startsWith(katex_html)) {
+                                                    result += ` \$${mathml.replace(katex_html, "")}\$ `;
+                                                } else {
+                                                    // // 字符串切片，去掉 mathml 开头等同长度的 katex_html，注意不能用 replace，因为 katex_html 里的字符顺序可能会变
+                                                    // result += ` \$${mathml.slice(katex_html.length)}\$ `;
+
+                                                    // 使用新写的 clearKatexMathML 函数去除开头的杂乱字符
+                                                    result += ` \$${clearKatexMathML(
+                                                        katex_mathml_elem.textContent
+                                                    )}\$ `;
+                                                }
+                                            } else {
+                                                if (mathml.startsWith(katex_html)) {
+                                                    result += `\n\$\$\n${mathml.replace(katex_html, "")}\n\$\$\n`;
+                                                } else {
+                                                    // // 字符串切片，去掉 mathml 开头等同长度的 katex_html，注意不能用 replace，因为 katex_html 里的字符顺序可能会变
+                                                    // result += `\n\$\$\n${mathml.slice(katex_html.length)}\n\$\$\n`;
+
+                                                    // 使用新写的 clearKatexMathML 函数去除开头的杂乱字符
+                                                    result += `\n\$\$\n${clearKatexMathML(
+                                                        katex_mathml_elem.textContent
+                                                    )}\n\$\$\n`;
+                                                }
+                                            }
                                         }
                                         break;
                                     }
@@ -922,7 +982,10 @@
             for (let index = 0; index < children.length; index++) {
                 const child = children[index];
                 let prefix = ordered ? `${"   ".repeat(listLevel)}${index + 1}. ` : `${"  ".repeat(listLevel)}- `;
-                const childText = (await processChildren(child, listLevel + 1)).trim();
+                let indent = "   ".repeat(listLevel);
+                let childText = await processChildren(child, listLevel + 1);
+                // 在处理列表时，如果列表项内有换行符，则需要在每行前添加缩进
+                childText = childText.replace(/\n/g, `\n${indent}`);
                 text += `${prefix}${childText}\n`;
             }
             text += `\n`;
@@ -1037,7 +1100,11 @@
      */
     async function downloadCSDNArticleToMarkdown(doc_body, getZip = false, url = "", prefix = "") {
         const articleTitle = doc_body.querySelector("#articleContentId")?.textContent.trim() || "未命名文章";
-        const articleInfo = doc_body.querySelector(".bar-content")?.textContent.replace(/\s{2,}/g, " ").trim() || "";
+        const articleInfo =
+            doc_body
+                .querySelector(".bar-content")
+                ?.textContent.replace(/\s{2,}/g, " ")
+                .trim() || "";
         const htmlInput = doc_body.querySelector("#content_views");
         if (!htmlInput) {
             alert("未找到文章内容。");
@@ -1053,7 +1120,11 @@
         // url = url.replace(/[?#@!$&'()*+,;=].*$/, "");
         url = clearUrl(url);
 
-        let markdown = await htmlToMarkdown(htmlInput, GM_getValue("mergeArticleContent") ? "assets" : `${prefix}${articleTitle}`, !GM_getValue("mergeArticleContent"));
+        let markdown = await htmlToMarkdown(
+            htmlInput,
+            GM_getValue("mergeArticleContent") ? "assets" : `${prefix}${articleTitle}`,
+            !GM_getValue("mergeArticleContent")
+        );
 
         if (GM_getValue("addArticleInfoInBlockquote")) {
             markdown = `> ${articleInfo}\n> 文章链接：${url}\n\n${markdown}`;
@@ -1094,7 +1165,10 @@
         // markdown = `# ${articleTitle}\n\n> ${articleInfo}\n\n${markdown}`;
 
         // 从 prefix 中获取序号
-        const index = parseInt(prefix.match(/\d+/)[0]);
+        let index = 0;
+        if (prefix !== "" && prefix.endsWith("_")) {
+            index = Number(prefix.slice(0, -1));
+        }
 
         await saveTextAsFile(markdown, `${prefix}${articleTitle}.md`, index);
 
@@ -1224,15 +1298,23 @@
 
         let extraPrefix = "";
         if (GM_getValue("addArticleTitleToMarkdown")) {
-            extraPrefix += `# ${document.title}\n\n`
+            extraPrefix += `# ${document.title}\n\n`;
         }
         if (GM_getValue("addArticleInfoInBlockquote_batch")) {
             const batchTitle = document.body.querySelector(".column_title")?.textContent.trim() || "";
             const batchDesc = document.body.querySelector(".column_text_desc")?.textContent.trim() || "";
-            const batchColumnData = document.body.querySelector(".column_data")?.textContent.replace(/\s{2,}/g, " ").trim() || "";
-            const batchAuthor = document.body.querySelector(".column_person_tit")?.textContent.replace(/\s{2,}/g, " ").trim() || ""; 
+            const batchColumnData =
+                document.body
+                    .querySelector(".column_data")
+                    ?.textContent.replace(/\s{2,}/g, " ")
+                    .trim() || "";
+            const batchAuthor =
+                document.body
+                    .querySelector(".column_person_tit")
+                    ?.textContent.replace(/\s{2,}/g, " ")
+                    .trim() || "";
             const batchUrl = clearUrl(base_url);
-            extraPrefix += `> ${batchDesc}\n> ${batchAuthor} ${batchColumnData}\n${batchUrl}\n\n`
+            extraPrefix += `> ${batchDesc}\n> ${batchAuthor} ${batchColumnData}\n${batchUrl}\n\n`;
         }
         if (GM_getValue("mergeArticleContent")) {
             mergeArticleContent(`${document.title}`, extraPrefix);
@@ -1317,11 +1399,11 @@
         }
         let extraPrefix = "";
         if (GM_getValue("addArticleTitleToMarkdown")) {
-            extraPrefix += `# ${document.title}\n\n`
+            extraPrefix += `# ${document.title}\n\n`;
         }
         if (GM_getValue("addArticleInfoInBlockquote_batch")) {
             const batchUrl = clearUrl(window.location.href);
-            extraPrefix += `> ${batchUrl}\n\n`
+            extraPrefix += `> ${batchUrl}\n\n`;
         }
         if (GM_getValue("mergeArticleContent")) {
             mergeArticleContent(`${document.title}`, extraPrefix);
@@ -1357,13 +1439,22 @@
             // 文章
             if (GM_getValue("mergeArticleContent")) {
                 GM_setValue("mergeArticleContent", false);
-                await downloadCSDNArticleToMarkdown(document.body, GM_getValue("zipCategories"), window.location.href);
+                await downloadCSDNArticleToMarkdown(
+                    document.body,
+                    GM_getValue("zipCategories"),
+                    window.location.href,
+                    ""
+                );
                 GM_setValue("mergeArticleContent", true);
             } else {
-                await downloadCSDNArticleToMarkdown(document.body, GM_getValue("zipCategories"), window.location.href);
+                await downloadCSDNArticleToMarkdown(
+                    document.body,
+                    GM_getValue("zipCategories"),
+                    window.location.href,
+                    ""
+                );
             }
             showFloatTip("文章下载完成。", 3000);
-
         } else if (url.includes("type=blog")) {
             await downloadAllArticlesOfUserToMarkdown();
         } else {
