@@ -1,22 +1,185 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      1.2.1
+// @version      1.3.1
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
 // @icon         https://g.csdnimg.cn/static/logo/favicon32.ico
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_addStyle
 // @grant        GM_xmlhttpRequest
 // @run-at       document-end
 // @license      PolyForm Strict License 1.0.0  https://polyformproject.org/licenses/strict/1.0.0/
 // @supportURL   https://github.com/Qalxry/csdn2md
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js
 // ==/UserScript==
-    
+
 (function () {
     "use strict";
+
+    let isDragging = 0;
+    let offsetX, offsetY;
+
+    // 添加全局样式
+    GM_addStyle(`
+        .tm_floating-container {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 9999;
+            transform-origin: bottom right;
+        }
+
+        .tm_main-button {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #12c2e9 0%, #c471ed 50%, #f64f59 100%);
+            box-shadow: 0 0 20px rgba(0,0,0,0.2);
+            border: none;
+            color: white;
+            font-size: 30px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .tm_content-box {
+            background: linear-gradient(45deg, #ffffff, #f8f9fa);
+            border-radius: 20px;
+            padding: 20px;
+            min-width: 480px !important;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            margin-bottom: 20px;
+            opacity: 0;
+            transform: scale(0);
+            transform-origin: bottom right;
+            transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            position: absolute;
+            bottom: 100%;
+            right: 0;
+        }
+
+        .tm_content-box.open {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .tm_complex-content {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .tm_content-item {
+            padding: 15px;
+            background: rgba(255,255,255,0.9);
+            border-radius: 10px;
+            border: 1px solid rgba(0,0,0,0.1);
+            transition: transform 0.2s ease;
+        }
+
+        .tm_content-item:hover {
+            transform: scale(1.1);
+        }
+
+        #myFloatWindow label {
+            white-space: nowrap;  /* 防止文字换行 */
+            user-select: none;    /* 优化用户体验 */
+        }
+
+        #myDownloadButton {
+            text-align: center;
+            padding: 5px 10px;
+            background: linear-gradient(135deg, #12c2e9 0%, #c471ed 50%, #f64f59 100%);
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: none;
+            border-radius: 5px;
+            margin-bottom: 5px;
+        }
+
+        #myDownloadButton:hover {
+            transform: scale(1.1);
+        }
+
+        #myGotoRepoButton {
+            text-align: center;
+            padding: 5px 10px;
+            background: linear-gradient(135deg, #12c2e9 0%, #c471ed 50%, #f64f59 100%);
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border-radius: 5px;
+            border: none;
+            margin-top: 12px;
+        }
+        
+        #myGotoRepoButton:hover {
+            transform: scale(1.1);
+        }
+    `);
+
+    // 创建悬浮容器
+    const container = document.createElement("div");
+    container.className = "tm_floating-container";
+    container.id = "draggable";
+
+    // 创建主按钮
+    const mainButton = document.createElement("button");
+    mainButton.className = "tm_main-button";
+    mainButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#FFFFFF"><path d="M480-337q-8 0-15-2.5t-13-8.5L308-492q-12-12-11.5-28t11.5-28q12-12 28.5-12.5T365-549l75 75v-286q0-17 11.5-28.5T480-800q17 0 28.5 11.5T520-760v286l75-75q12-12 28.5-11.5T652-548q11 12 11.5 28T652-492L508-348q-6 6-13 8.5t-15 2.5ZM240-160q-33 0-56.5-23.5T160-240v-80q0-17 11.5-28.5T200-360q17 0 28.5 11.5T240-320v80h480v-80q0-17 11.5-28.5T760-360q17 0 28.5 11.5T800-320v80q0 33-23.5 56.5T720-160H240Z"/></svg>`;
+
+    // 创建内容区域
+    const contentBox = document.createElement("div");
+    contentBox.className = "tm_content-box";
+
+    // 创建复杂内容
+    contentBox.innerHTML = `
+        <div class="tm_complex-content" id="tmComplexContent"></div>
+    `;
+
+    // 组装元素
+    container.appendChild(contentBox);
+    container.appendChild(mainButton);
+    document.body.appendChild(container);
+
+    // 事件处理
+    let isOpen = false;
+
+    const toggleContent = () => {
+        isOpen = !isOpen;
+        contentBox.classList.toggle("open", isOpen);
+        mainButton.style.transform = isOpen ? "scale(1.1) rotate(360deg)" : "scale(1) rotate(0deg)";
+    };
+
+    const closeContent = () => {
+        isOpen = false;
+        contentBox.classList.remove("open");
+        mainButton.style.transform = "scale(1) rotate(0deg)";
+    };
+
+    // 事件监听
+    mainButton.addEventListener("click", (e) => {
+        e.stopPropagation();
+        toggleContent();
+    });
+
+    document.addEventListener("click", (e) => {
+        if (!container.contains(e.target)) {
+            closeContent();
+        }
+    });
+
+    // 防止内容区域点击关闭
+    contentBox.addEventListener("click", (e) => {
+        e.stopPropagation();
+    });
 
     /**
      * 可重入异步锁。
@@ -98,15 +261,7 @@
 
     // 创建悬浮窗
     const floatWindow = document.createElement("div");
-    floatWindow.style.position = "fixed";
-    floatWindow.style.bottom = "20px";
-    floatWindow.style.right = "20px";
-    floatWindow.style.padding = "10px";
-    floatWindow.style.backgroundColor = "rgba(0, 0, 0, 0.5)";
-    floatWindow.style.color = "#fff";
-    floatWindow.style.borderRadius = "5px";
-    floatWindow.style.boxShadow = "0 2px 5px rgba(0, 0, 0, 0.5)";
-    floatWindow.style.zIndex = "9999";
+    floatWindow.style.alignItems = "center";
     floatWindow.style.display = "flex";
     floatWindow.style.flexDirection = "column"; // 里面的元素每个占一行
     floatWindow.id = "myFloatWindow";
@@ -115,23 +270,28 @@
     const downloadButton = document.createElement("button");
     downloadButton.innerHTML =
         "下载CSDN文章为Markdown<br>（支持专栏、文章、用户全部文章页面）<br>（推荐使用typora打开下载的Markdown）";
-    downloadButton.style.textAlign = "center";
-    downloadButton.style.padding = "5px 10px";
-    downloadButton.style.border = "none";
-    downloadButton.style.backgroundColor = "#4CAF50";
-    downloadButton.style.color = "white";
-    downloadButton.style.borderRadius = "3px";
-    downloadButton.style.cursor = "pointer";
     downloadButton.id = "myDownloadButton";
-    // 为下载按钮添加hover效果
-    downloadButton.addEventListener("mouseover", function () {
-        downloadButton.style.backgroundColor = "#45a049";
-    });
-    downloadButton.addEventListener("mouseout", function () {
-        downloadButton.style.backgroundColor = "#4CAF50";
-    });
+    // downloadButton.style.textAlign = "center";
+    // downloadButton.style.padding = "5px 10px";
+    // downloadButton.style.border = "none";
+    // downloadButton.style.borderRadius = "3px";
+    // downloadButton.style.cursor = "pointer";
+    // // 为下载按钮添加hover效果
+    // downloadButton.addEventListener("mouseover", function () {
+    //     downloadButton.style.backgroundColor = "#45a049";
+    // });
+    // downloadButton.addEventListener("mouseout", function () {
+    //     downloadButton.style.backgroundColor = "#4CAF50";
+    // });
     // 将按钮添加到悬浮窗
     floatWindow.appendChild(downloadButton);
+
+    const optionContainer = document.createElement("div");
+    optionContainer.style.display = "flex";
+    optionContainer.style.flexDirection = "column";
+    optionContainer.style.alignItems = "left";
+    optionContainer.style.marginTop = "10px";
+    floatWindow.appendChild(optionContainer);
 
     // 创建选项 checkbox
     // 从油猴脚本中获取选项的值
@@ -168,7 +328,7 @@
         optionDiv.appendChild(optionLabel);
         optionDivList.push(optionDiv);
         optionCheckBoxList.push(optionCheckbox);
-        floatWindow.appendChild(optionDiv);
+        optionContainer.appendChild(optionDiv);
         optionCheckbox.addEventListener("change", function () {
             GM_setValue(id, optionCheckbox.checked);
             if (optionCheckbox.checked) {
@@ -246,12 +406,46 @@
         // await testMain();
     });
 
-    document.body.appendChild(floatWindow);
+
+    const gotoRepoButton = document.createElement("button");
+    gotoRepoButton.innerHTML = "前往 GitHub 给作者点个 Star ⭐ ➡️";
+    gotoRepoButton.id = "myGotoRepoButton";
+    floatWindow.appendChild(gotoRepoButton);
+
+    gotoRepoButton.addEventListener("click", function () {
+        window.open("https://github.com/Qalxry/csdn2md");
+    });
+
+    // document.body.appendChild(floatWindow);
+    document.getElementById("tmComplexContent").appendChild(floatWindow);
 
     // 监听窗口的 focus 事件
     window.addEventListener("focus", function () {
         // 脚本选项可能在其他窗口中被修改，所以每次窗口获得焦点时都要重新加载
         updateAllOptions();
+    });
+
+    const draggable = document.getElementById("draggable");
+
+    // 从 GM_getValue 中读取 draggable.style.top 的值
+    draggable.style.top = GM_getValue("draggableTop") || draggable.style.top;
+
+    draggable.addEventListener("mousedown", (e) => {
+        isDragging = true;
+        offsetX = e.clientX - draggable.offsetLeft;
+        offsetY = e.clientY - draggable.offsetTop;
+    });
+
+    document.addEventListener("mousemove", (e) => {
+        if (isDragging) {
+            // draggable.style.left = `${e.clientX - offsetX}px`;
+            draggable.style.top = `${e.clientY - offsetY}px`;
+        }
+    });
+
+    document.addEventListener("mouseup", () => {
+        isDragging = false;
+        GM_setValue("draggableTop", draggable.style.top);
     });
 
     // 全局变量
@@ -811,14 +1005,29 @@
                                         const katex_html_elem = node.querySelector(".katex-html");
                                         if (katex_mathml_elem !== null && katex_html_elem !== null) {
                                             // 移除 .katex-mathml 里的 .MathJax_Display 类，否则会造成错乱
-                                            if (katex_mathml_elem.querySelector(".MathJax_Display") && katex_mathml_elem.querySelector("script")) {
-                                                katex_mathml_elem.querySelectorAll(".MathJax_Display").forEach((elem) => elem.remove());
+                                            if (
+                                                katex_mathml_elem.querySelector(".MathJax_Display") &&
+                                                katex_mathml_elem.querySelector("script")
+                                            ) {
+                                                katex_mathml_elem
+                                                    .querySelectorAll(".MathJax_Display")
+                                                    .forEach((elem) => elem.remove());
                                             }
-                                            if (katex_mathml_elem.querySelector(".MathJax_Preview") && katex_mathml_elem.querySelector("script")) {
-                                                katex_mathml_elem.querySelectorAll(".MathJax_Preview").forEach((elem) => elem.remove());
+                                            if (
+                                                katex_mathml_elem.querySelector(".MathJax_Preview") &&
+                                                katex_mathml_elem.querySelector("script")
+                                            ) {
+                                                katex_mathml_elem
+                                                    .querySelectorAll(".MathJax_Preview")
+                                                    .forEach((elem) => elem.remove());
                                             }
-                                            if (katex_mathml_elem.querySelector(".MathJax_Error") && katex_mathml_elem.querySelector("script")) {
-                                                katex_mathml_elem.querySelectorAll(".MathJax_Error").forEach((elem) => elem.remove());
+                                            if (
+                                                katex_mathml_elem.querySelector(".MathJax_Error") &&
+                                                katex_mathml_elem.querySelector("script")
+                                            ) {
+                                                katex_mathml_elem
+                                                    .querySelectorAll(".MathJax_Error")
+                                                    .forEach((elem) => elem.remove());
                                             }
 
                                             // // 清除 .katex-mathml 里除了 script 和 #text 之外的所有元素
