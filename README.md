@@ -28,7 +28,11 @@
 
 油猴脚本下载：[csdn2md - 批量下载CSDN文章为Markdown](https://greasyfork.org/en/scripts/523540-csdn2md-%E6%89%B9%E9%87%8F%E4%B8%8B%E8%BD%BDcsdn%E6%96%87%E7%AB%A0%E4%B8%BAmarkdown)
 
-本仓库测试时间为 2025.1.12 ，请注意 CSDN 页面结构随时可能变动，导致脚本无法正常使用。
+> [!WARNING]
+>
+> 本仓库最后测试时间为 `2025.3.16`
+>
+> 请注意 CSDN 页面结构随时可能变动，导致脚本无法正常使用。
 
 ------
 
