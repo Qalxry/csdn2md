@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      2.0.0
+// @version      2.1.0
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -180,6 +180,7 @@
             this.floatWindow = null;
             this.downloadButton = null;
             this.gotoRepoButton = null;
+            this.defaultOptions = {};
             this.optionDivList = [];
             this.optionCheckBoxList = [];
             this.isOpen = false;
@@ -278,7 +279,7 @@
                     transform: scale(1.1);
                 }
 
-                #myGotoRepoButton {
+                #myGotoRepoButton, #myResetButton {
                     text-align: center;
                     padding: 5px 10px;
                     background: linear-gradient(135deg, #12c2e9 0%, #c471ed 50%, #f64f59 100%);
@@ -290,7 +291,7 @@
                     margin-top: 12px;
                 }
 
-                #myGotoRepoButton:hover {
+                #myGotoRepoButton:hover, #myResetButton:hover {
                     transform: scale(1.1);
                 }
             `);
@@ -327,7 +328,7 @@
             // 还原之前保存的位置
             const savedTop = GM_getValue("draggableTop");
             if (savedTop) {
-                this.container.style.top = savedTop;
+                this.container.style.top = Math.min(window.innerHeight - 100, parseInt(savedTop)) + "px";
             }
 
             // 创建浮动窗口
@@ -417,6 +418,12 @@
                 optionContainer
             );
 
+            // 创建恢复默认设置按钮
+            this.resetButton = document.createElement("button");
+            this.resetButton.innerHTML = "恢复默认设置";
+            this.resetButton.id = "myResetButton";
+            this.floatWindow.appendChild(this.resetButton);
+
             // 创建去GitHub按钮
             this.gotoRepoButton = document.createElement("button");
             this.gotoRepoButton.innerHTML = "前往 GitHub 给作者点个 Star ⭐ ➡️";
@@ -454,6 +461,13 @@
                 await this.downloadManager.runMain();
             });
 
+            // 默认设置按钮点击事件
+            this.resetButton.addEventListener("click", () => {
+                Object.entries(this.defaultOptions).forEach(([id, value]) => GM_setValue(id, value));
+                this.updateAllOptions();
+                this.showFloatTip("已恢复默认设置", 1000);
+            });
+
             // GitHub按钮点击事件
             this.gotoRepoButton.addEventListener("click", () => {
                 window.open("https://github.com/Qalxry/csdn2md");
@@ -470,7 +484,19 @@
             document.addEventListener("mousemove", (e) => {
                 if (this.isDragging) {
                     // draggable.style.left = `${e.clientX - offsetX}px`;  // 左侧拖拽
-                    draggable.style.top = `${e.clientY - this.offsetY}px`;
+                    // draggable.style.top = `${e.clientY - this.offsetY}px`;
+                    draggable.style.top = Math.min(
+                        window.innerHeight - 100,
+                        Math.max(0, e.clientY - this.offsetY)
+                    ) + "px"; // 限制在窗口内
+                }
+            });
+
+            // 监视页面缩放事件
+            window.addEventListener("resize", () => {
+                const savedTop = GM_getValue("draggableTop");
+                if (savedTop) {
+                    this.container.style.top = Math.min(window.innerHeight - 100, parseInt(savedTop)) + "px";
                 }
             });
 
@@ -512,6 +538,8 @@
          * @param {Object} constraints - 约束条件
          */
         addOption(id, innerHTML, defaultValue = false, container, constraints = {}) {
+            this.defaultOptions[id] = defaultValue;
+
             if (GM_getValue(id) === undefined) {
                 GM_setValue(id, defaultValue);
             }
@@ -897,6 +925,28 @@
          * @returns {Promise<string>} Markdown内容
          */
         async htmlToMarkdown(articleElement, mdAssetDirName = "", enableTOC = true) {
+            // 预定义的特殊字段
+            const CONSTANT_DOUBLE_NEW_LINE = "<|CSDN2MD@CONSTANT_DOUBLE_NEW_LINE@23hy7b|>";
+            const SEPARATION_BEAUTIFICATION = "<|CSDN2MD@SEPARATION_BEAUTIFICATION@2caev2|>";
+
+            // 处理预定义的特殊字段
+            const DDNL = escapeRegExp(CONSTANT_DOUBLE_NEW_LINE);
+            const SEPB = escapeRegExp(SEPARATION_BEAUTIFICATION);
+
+            function SpecialTrim(text = "") {
+                return text.replace(new RegExp(`^(?:${SEPB}|\\s)+`), "").replace(new RegExp(`(?:${SEPB}|\\s)+$`), "");
+            }
+            // 1. 连续的 "\n" 与 CONSTANT_DOUBLE_NEW_LINE 替换为 "\n\n"
+            const RE_DOUBLE_NL = new RegExp(`(?:\\n|${DDNL})*${DDNL}(?:\\n|${DDNL})*`, "g");
+            // 2. 连续的 SEPARATION_BEAUTIFICATION 替换为 " "，但如果前面是换行符，替换为 ""
+            const RE_SEP_NOLINE = new RegExp(`(?<!\\n)(?:${SEPB})+`, "g");
+            const RE_SEP_WITHNL = new RegExp(`(\\n)(?:${SEPB})+`, "g");
+
+            // 辅助：对常量做正则转义
+            function escapeRegExp(s) {
+                return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            }
+
             // 辅助函数，用于转义特殊的Markdown字符
             const escapeMarkdown = (text) => {
                 // return text.replace(/([\\`*_\{\}\[\]()#+\-.!])/g, "\\$1").trim();
@@ -927,7 +977,69 @@
                             case "h6":
                                 {
                                     const htype = Number(node.tagName[1]);
-                                    result += `${"#".repeat(htype)} ${node.textContent.trim()}\n\n`;
+
+                                    // FIX: 修复该页面中，hx标签的内容中有其他标签，而这里直接使用了textContent，造成内容丢失的BUG
+                                    // URL: https://blog.csdn.net/naozibuok/article/details/142671763
+                                    // <<< FIX BEGIN >>>
+
+                                    // 不再直接使用textContent
+                                    // result += `${"#".repeat(htype)} ${node.textContent.trim()}\n\n`;
+
+                                    // 移除节点内部开头的 <a> 标签
+                                    node.querySelectorAll("a").forEach((aTag) => {
+                                        if (aTag && aTag.textContent.trim() === "") {
+                                            aTag.remove();
+                                        }
+                                    });
+                                    // // 创建一个浮动的div元素，作为打印hx标签的内容，因为console.log被重写了
+                                    // let hxContent = document.getElementById("hxContent");
+                                    // if (!hxContent) {
+                                    //     hxContent = document.createElement("div");
+                                    //     hxContent.id = "hxContent";
+                                    //     hxContent.style.position = "absolute";
+                                    //     hxContent.style.left = "0";
+                                    //     hxContent.style.top = "0";
+                                    //     hxContent.style.zIndex = "9999";
+                                    //     hxContent.style.backgroundColor = "lightgray";
+                                    //     hxContent.style.border = "1px solid black";
+                                    //     hxContent.style.padding = "10px";
+                                    //     hxContent.style.width = "auto";
+                                    //     hxContent.style.height = "auto";
+                                    //     hxContent.style.whiteSpace = "pre-wrap";
+                                    //     hxContent.style.fontSize = "16px";
+                                    //     document.body.appendChild(hxContent);
+                                    // }
+                                    // hxContent.innerHTML += node.nodeType + " " + node.tagName + "<br>";
+                                    // hxContent.innerHTML += `Original: <br><textarea readonly rows="3" cols="100">${node.outerHTML}</textarea><br>`;
+                                    // 处理节点内部元素，包括hx标签的文本
+                                    let childContent = await processChildren(node, listLevel);
+                                    // hxContent.innerHTML += `Processed: <br><textarea readonly rows="3" cols="100">${childContent}</textarea><br>`;
+                                    const hPrefix = "#".repeat(htype);
+                                    // 按行分割分别处理。
+                                    // 如果该行内容不为空，则添加前缀。
+                                    childContent = childContent
+                                        .split("\n")
+                                        .map((line) => {
+                                            if (line.trim() !== "") {
+                                                // 如果该行内容是 <img /> 标签，则不添加前缀
+                                                if (
+                                                    line.trim().search("<img") !== -1 &&
+                                                    line.trim().search("/>") !== -1
+                                                ) {
+                                                    return line;
+                                                }
+                                                return `${hPrefix} ${line}`;
+                                            } else {
+                                                return line;
+                                            }
+                                        })
+                                        .join("\n");
+                                    // hxContent.innerHTML += `Markdown: <br><textarea readonly rows="1" cols="100">${childContent.replaceAll(
+                                    //     "\n",
+                                    //     "\\n"
+                                    // )}</textarea><br><hr>`;
+                                    result += `${childContent}${CONSTANT_DOUBLE_NEW_LINE}`;
+                                    // <<< FIX END >>>
                                 }
                                 break;
                             case "p":
@@ -965,18 +1077,26 @@
                                 break;
                             case "strong":
                             case "b":
-                                result += ` **${(await processChildren(node, listLevel)).trim()}** `;
+                                result += `${SEPARATION_BEAUTIFICATION}**${SpecialTrim(
+                                    await processChildren(node, listLevel)
+                                )}**${SEPARATION_BEAUTIFICATION}`;
                                 break;
                             case "em":
                             case "i":
-                                result += ` *${(await processChildren(node, listLevel)).trim()}* `;
+                                result += `${SEPARATION_BEAUTIFICATION}*${SpecialTrim(
+                                    await processChildren(node, listLevel)
+                                )}*${SEPARATION_BEAUTIFICATION}`;
                                 break;
                             case "u":
-                                result += ` <u>${(await processChildren(node, listLevel)).trim()}</u> `;
+                                result += `${SEPARATION_BEAUTIFICATION}<u>${SpecialTrim(
+                                    await processChildren(node, listLevel)
+                                )}</u>${SEPARATION_BEAUTIFICATION}`;
                                 break;
                             case "s":
                             case "strike":
-                                result += ` ~~${(await processChildren(node, listLevel)).trim()}~~ `;
+                                result += `${SEPARATION_BEAUTIFICATION}~~${SpecialTrim(
+                                    await processChildren(node, listLevel)
+                                )}~~${SEPARATION_BEAUTIFICATION}`;
                                 break;
                             case "a":
                                 {
@@ -998,7 +1118,7 @@
                                         result += `${text}`;
                                         break;
                                     }
-                                    result += ` [${text}](${href}) `;
+                                    result += `${SEPARATION_BEAUTIFICATION}[${text}](${href})${SEPARATION_BEAUTIFICATION}`;
                                 }
                                 break;
                             case "img":
@@ -1010,10 +1130,10 @@
                                     const height = node.getAttribute("height") || "";
 
                                     if (cls.includes("mathcode")) {
-                                        result += `\n\$\$\n${alt}\n\$\$`;
+                                        result += `${SEPARATION_BEAUTIFICATION}\$\$\n${alt}\n\$\$`;
                                     } else {
                                         if (src.includes("#pic_center") || GM_getValue("forceImageCentering")) {
-                                            result += "\n\n";
+                                            result += CONSTANT_DOUBLE_NEW_LINE;
                                         } else {
                                             result += " ";
                                         }
@@ -1021,10 +1141,11 @@
                                             src = await this.fileManager.saveWebImageToLocal(src, mdAssetDirName);
                                         }
                                         if (width && height && GM_getValue("enableImageSize")) {
-                                            result += `<img src="${src}" alt="${alt}" style="max-height:${height}px; box-sizing:content-box;" />\n`;
+                                            result += `<img src="${src}" alt="${alt}" style="max-height:${height}px; box-sizing:content-box;" />`;
                                         } else {
-                                            result += `![${alt}](${src})\n`;
+                                            result += `![${alt}](${src})`;
                                         }
+                                        result += CONSTANT_DOUBLE_NEW_LINE;
                                     }
                                 }
                                 break;
@@ -1078,7 +1199,7 @@
                             case "code":
                                 {
                                     const codeText = node.textContent;
-                                    result += ` \`${codeText}\` `;
+                                    result += `${SEPARATION_BEAUTIFICATION}\`${codeText}\`${SEPARATION_BEAUTIFICATION}`;
                                 }
                                 break;
                             case "hr":
@@ -1155,19 +1276,25 @@
                                                 const katex_html = Utils.clearSpecialChars(katex_html_elem.textContent);
                                                 if (node_class.includes("katex--inline")) {
                                                     if (mathml.startsWith(katex_html)) {
-                                                        result += ` \$${mathml.replace(katex_html, "")}\$ `;
+                                                        result += `${SEPARATION_BEAUTIFICATION}\$${mathml.replace(
+                                                            katex_html,
+                                                            ""
+                                                        )}\$${SEPARATION_BEAUTIFICATION}`;
                                                     } else {
-                                                        result += ` \$${Utils.clearKatexMathML(
+                                                        result += `${SEPARATION_BEAUTIFICATION}\$${Utils.clearKatexMathML(
                                                             katex_mathml_elem.textContent
-                                                        )}\$ `;
+                                                        )}\$${SEPARATION_BEAUTIFICATION}`;
                                                     }
                                                 } else {
                                                     if (mathml.startsWith(katex_html)) {
-                                                        result += `\n\$\$\n${mathml.replace(katex_html, "")}\n\$\$\n`;
+                                                        result += `${CONSTANT_DOUBLE_NEW_LINE}\$\$\n${mathml.replace(
+                                                            katex_html,
+                                                            ""
+                                                        )}\n\$\$${CONSTANT_DOUBLE_NEW_LINE}`;
                                                     } else {
-                                                        result += `\n\$\$\n${Utils.clearKatexMathML(
+                                                        result += `${CONSTANT_DOUBLE_NEW_LINE}\$\$\n${Utils.clearKatexMathML(
                                                             katex_mathml_elem.textContent
-                                                        )}\n\$\$\n`;
+                                                        )}\n\$\$${CONSTANT_DOUBLE_NEW_LINE}`;
                                                     }
                                                 }
                                             }
@@ -1189,10 +1316,13 @@
                                 }
                                 break;
                             case "kbd":
-                                result += ` <kbd>${node.textContent}</kbd> `;
+                                result += `${SEPARATION_BEAUTIFICATION}<kbd>${node.textContent}</kbd>${SEPARATION_BEAUTIFICATION}`;
                                 break;
                             case "mark":
-                                result += ` <mark>${await processChildren(node, listLevel)}</mark> `;
+                                result += `${SEPARATION_BEAUTIFICATION}<mark>${await processChildren(
+                                    node,
+                                    listLevel
+                                )}</mark>${SEPARATION_BEAUTIFICATION}`;
                                 break;
                             case "sub":
                                 result += `<sub>${await processChildren(node, listLevel)}</sub>`;
@@ -1224,9 +1354,9 @@
                                     // 检查是否有style标签存在于svg元素内，如果有则转换为base64形式
                                     if (node.querySelector("style")) {
                                         const base64 = Utils.svgToBase64(node.outerHTML);
-                                        result += `![SVG Image](data:image/svg+xml;base64,${base64})\n\n`;
+                                        result += `![SVG Image](data:image/svg+xml;base64,${base64})${CONSTANT_DOUBLE_NEW_LINE}`;
                                     } else {
-                                        result += `<div align="center">${node.outerHTML}</div>\n\n`;
+                                        result += `<div align="center">${node.outerHTML}</div>${CONSTANT_DOUBLE_NEW_LINE}`;
                                     }
                                 }
                                 break;
@@ -1255,9 +1385,14 @@
                                 // 避免进入 default : https://blog.csdn.net/azhengye/article/details/8481846
                                 result += await processChildren(node, listLevel);
                                 break;
+                            case "td":
+                            case "th":
+                                // 处理表格单元格
+                                result += await processChildren(node, listLevel);
+                                break;
                             default:
                                 result += await processChildren(node, listLevel);
-                                result += "\n\n";
+                                result += CONSTANT_DOUBLE_NEW_LINE;
                                 break;
                         }
                         break;
@@ -1296,19 +1431,34 @@
              * @returns {Promise<string>} 列表的Markdown字符串
              */
             const processList = async (node, listLevel, ordered) => {
-                let text = "";
+                let text = CONSTANT_DOUBLE_NEW_LINE;
                 const children = Array.from(node.children).filter((child) => child.tagName.toLowerCase() === "li");
-                text += "\n";
                 for (let index = 0; index < children.length; index++) {
                     const child = children[index];
-                    let prefix = ordered ? `${"   ".repeat(listLevel)}${index + 1}. ` : `${"  ".repeat(listLevel)}- `;
-                    let indent = "   ".repeat(listLevel);
-                    let childText = await processChildren(child, listLevel + 1);
-                    // 在处理列表时，如果列表项内有换行符，则需要在每行前添加缩进
-                    childText = childText.replace(/\n/g, `\n${indent}`);
-                    text += `${prefix}${childText}\n`;
+
+                    let prefix = ordered ? `${index + 1}. ` : `- `;
+                    let indent = ordered ? "   " : "  ";
+
+                    let childText = `${await processChildren(child, listLevel + 1)}`;
+
+                    // 由于缩进，这里必须先替换掉 CONSTANT_DOUBLE_NEW_LINE
+                    childText = childText.replace(RE_DOUBLE_NL, "\n\n");
+
+                    childText = childText
+                        .split("\n")
+                        .map((line, index) => {
+                            // 如果是空行，则不添加缩进
+                            if (line.trim() === "" || index === 0) {
+                                return line;
+                            }
+                            // 否则添加缩进
+                            return `${indent}${line}`;
+                        })
+                        .join("\n");
+
+                    text += `${prefix}${childText}${CONSTANT_DOUBLE_NEW_LINE}`;
                 }
-                text += `\n`;
+                // text += `\n`;
                 return text;
             };
 
@@ -1325,7 +1475,9 @@
 
                 // 处理表头
                 const headerCells = Array.from(rows[0].querySelectorAll("th, td"));
-                const headers = await Promise.all(headerCells.map(async (cell) => (await processNode(cell)).trim()));
+                const headers = await Promise.all(
+                    headerCells.map(async (cell) => (await processNode(cell)).trim().replaceAll(RE_DOUBLE_NL, "<br />"))
+                );
                 table += `| ${headers.join(" | ")} |\n`;
 
                 // 处理分隔符
@@ -1346,10 +1498,14 @@
                 // 处理表格内容
                 for (let i = 1; i < rows.length; i++) {
                     const cells = Array.from(rows[i].querySelectorAll("td"));
-                    const row = await Promise.all(cells.map(async (cell) => (await processNode(cell)).trim()));
-                    table += `| ${row.join(" | ")} |\n`;
+                    const row = await Promise.all(
+                        cells.map(async (cell) => (await processNode(cell)).trim().replaceAll(RE_DOUBLE_NL, "<br />"))
+                    );
+                    table += `| ${row.join(" | ")} |`;
+                    if (i < rows.length - 1) {
+                        table += "\n";
+                    }
                 }
-
                 return table;
             };
 
@@ -1403,7 +1559,14 @@
             for (const child of articleElement.childNodes) {
                 markdown += await processNode(child);
             }
-            return markdown.trim();
+            markdown = markdown.trim();
+
+            markdown = markdown
+                .replaceAll(RE_DOUBLE_NL, "\n\n") // 1. 吃掉前后重复换行和标记，统一为两个换行
+                .replaceAll(RE_SEP_NOLINE, " ") // 2.a 非换行前的标记串 → 空格
+                .replaceAll(RE_SEP_WITHNL, "$1"); // 2.b 换行后的标记串 → 保留换行
+
+            return markdown;
         }
     }
 
