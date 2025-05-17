@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      2.1.1
+// @version      2.1.2
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -1042,7 +1042,27 @@
                                 break;
                             case "p":
                                 {
+                                    const cls = node.getAttribute("class");
                                     const style = node.getAttribute("style");
+                                    if (cls && cls.includes("img-center")) {
+                                        // Same as <center> tag
+                                        node.childNodes.forEach((child) => {
+                                            if (
+                                                child.nodeType === ELEMENT_NODE &&
+                                                child.tagName.toLowerCase() === "img"
+                                            ) {
+                                                if (!child.getAttribute("src").includes("#pic_center")) {
+                                                    child.setAttribute(
+                                                        "src",
+                                                        child.getAttribute("src") + "#pic_center"
+                                                    );
+                                                }
+                                            }
+                                        });
+                                        result += await processChildren(node, listLevel);
+                                        result += CONSTANT_DOUBLE_NEW_LINE;
+                                        break;
+                                    }
                                     if (node.getAttribute("id") === "main-toc") {
                                         if (enableTOC) {
                                             result += `**目录**\n\n[TOC]\n\n`;
