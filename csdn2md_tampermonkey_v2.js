@@ -485,10 +485,8 @@
                 if (this.isDragging) {
                     // draggable.style.left = `${e.clientX - offsetX}px`;  // 左侧拖拽
                     // draggable.style.top = `${e.clientY - this.offsetY}px`;
-                    draggable.style.top = Math.min(
-                        window.innerHeight - 100,
-                        Math.max(0, e.clientY - this.offsetY)
-                    ) + "px"; // 限制在窗口内
+                    draggable.style.top =
+                        Math.min(window.innerHeight - 100, Math.max(0, e.clientY - this.offsetY)) + "px"; // 限制在窗口内
                 }
             });
 
@@ -1140,8 +1138,22 @@
                                         if (GM_getValue("saveWebImages")) {
                                             src = await this.fileManager.saveWebImageToLocal(src, mdAssetDirName);
                                         }
-                                        if (width && height && GM_getValue("enableImageSize")) {
-                                            result += `<img src="${src}" alt="${alt}" style="max-height:${height}px; box-sizing:content-box;" />`;
+                                        if (height && GM_getValue("enableImageSize")) {
+                                            // 如果 height 是数字，则添加 px
+                                            // 如果带有单位，则直接使用
+                                            const heightValue = height.replace(/[^0-9]/g, "");
+                                            const heightUnit = height.replace(/[0-9]/g, "") || "px";
+                                            const heightStyle = heightValue
+                                                ? `max-height:${heightValue}${heightUnit};`
+                                                : "";
+                                            result += `<img src="${src}" alt="${alt}" style="${heightStyle} box-sizing:content-box;" />`;
+                                        } else if (width && GM_getValue("enableImageSize")) {
+                                            // 如果 width 是数字，则添加 px
+                                            // 如果带有单位，则直接使用
+                                            const widthValue = width.replace(/[^0-9]/g, "");
+                                            const widthUnit = width.replace(/[0-9]/g, "") || "px";
+                                            const widthStyle = widthValue ? `max-width:${widthValue}${widthUnit};` : "";
+                                            result += `<img src="${src}" alt="${alt}" style="${widthStyle} box-sizing:content-box;" />`;
                                         } else {
                                             result += `![${alt}](${src})`;
                                         }
@@ -1390,6 +1402,22 @@
                                 // 处理表格单元格
                                 result += await processChildren(node, listLevel);
                                 break;
+                            case "center":
+                                // 处理居中标签
+                                if (node.childNodes.length === 1 && node.childNodes[0].nodeType === TEXT_NODE) {
+                                    result += `<center>${node.textContent.trim().replace("\n", "<br>")}</center>\n\n`;
+                                } else {
+                                    node.childNodes.forEach((child) => {
+                                        if (child.nodeType === ELEMENT_NODE && child.tagName.toLowerCase() === "img") {
+                                            if (!child.getAttribute("src").includes("#pic_center")) {
+                                                child.setAttribute("src", child.getAttribute("src") + "#pic_center");
+                                            }
+                                        }
+                                    });
+                                    result += await processChildren(node, listLevel);
+                                    result += CONSTANT_DOUBLE_NEW_LINE;
+                                }
+                                break;
                             default:
                                 result += await processChildren(node, listLevel);
                                 result += CONSTANT_DOUBLE_NEW_LINE;
@@ -1626,6 +1654,8 @@
                 } else {
                     alert("无法识别的页面。");
                 }
+            } catch (error) {
+                this.uiManager.showFloatTip(`下载文章时出错，错误信息：\n${error.message}`);
             } finally {
                 this.uiManager.enableFloatWindow();
                 this.fileManager.reset(); // 重置FileManager
