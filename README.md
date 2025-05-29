@@ -195,3 +195,5 @@ csdn2md/
 如有任何建议或问题，欢迎提交 Issue ，作者会根据时间情况尽快回复。
 
 **免责声明**：使用本工具前，请确保您拥有相关内容的合法使用权。作者对因使用本工具而导致的任何法律问题不承担责任。
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Qalxry/csdn2md&type=Date)](https://star-history.com/#Qalxry/csdn2md&Date)
