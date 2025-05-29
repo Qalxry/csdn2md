@@ -36,12 +36,24 @@
 
 ------
 
-> [!WARNING] 
->
-> 请注意，如果脚本弹出【一个用户脚本试图访问一个跨域资源】的提示，这是因为脚本需要访问 CSDN 的页面，以获取文章内容。请点击【总是允许此域名】，否则脚本无法正常工作。
->
-> ![alt text](./assets/image.png)
->
+## Q&A
+
+### 1. 我下载了油猴脚本，但是没有看到下载按钮
+
+可能是你的浏览器阻止了油猴插件，需要你打开扩展程序的开发人员模式，此时油猴插件会显示 “Please enable developer mode to allow userscript injection.”
+
+可参考 [https://blog.csdn.net/m0_57703994/article/details/143798922](https://blog.csdn.net/m0_57703994/article/details/143798922) 的教程解决该问题。
+
+![图片](https://github.com/user-attachments/assets/732074a6-c143-4a89-95a9-79f8403ad9e7)
+
+
+### 2. 点击下载弹出【一个用户脚本试图访问一个跨域资源】的提示
+
+这是因为脚本需要访问 CSDN 的页面，以获取文章内容。
+请点击【总是允许此域名】，否则脚本无法正常工作。
+
+![alt text](./assets/image.png)
+
 > 如果你点错了或者超时没有选到，可以到 Tampermonkey，点击【管理面板】，在【已安装脚本】中双击【csdn2md - 批量下载CSDN文章为Markdown】，点击【设置】，查看【XHR 安全】的【用户域名黑名单】是否有东西，如果有，删除即可。
 >
 > ![alt text](./assets/image-1.png)
