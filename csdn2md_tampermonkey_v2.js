@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      2.1.4
+// @version      2.1.5
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -107,6 +107,14 @@
             const uint8Array = new TextEncoder().encode(svgText);
             const binaryString = uint8Array.reduce((data, byte) => data + String.fromCharCode(byte), "");
             return btoa(binaryString);
+        },
+
+        formatSeconds(seconds) {
+            const hrs = Math.floor(seconds / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+            const pad = (num) => num.toString().padStart(2, "0");
+            return `${pad(hrs)}:${pad(mins)}:${pad(secs)}`;
         },
     };
 
@@ -263,36 +271,34 @@
                     user-select: none;    /* 优化用户体验 */
                 }
 
-                #myDownloadButton {
+                #myDownloadButton, #myGotoRepoButton, #myResetButton {
                     text-align: center;
                     padding: 5px 10px;
                     background: linear-gradient(135deg, #12c2e9 0%, #c471ed 50%, #f64f59 100%);
                     color: white;
                     cursor: pointer;
                     transition: all 0.3s ease;
-                    border: none;
                     border-radius: 5px;
+                    border: none;
+                }
+
+                #myDownloadButton {
                     margin-bottom: 5px;
                 }
 
-                #myDownloadButton:hover {
-                    transform: scale(1.1);
-                }
-
                 #myGotoRepoButton, #myResetButton {
-                    text-align: center;
-                    padding: 5px 10px;
-                    background: linear-gradient(135deg, #12c2e9 0%, #c471ed 50%, #f64f59 100%);
-                    color: white;
-                    cursor: pointer;
-                    transition: all 0.3s ease;
-                    border-radius: 5px;
-                    border: none;
                     margin-top: 12px;
                 }
 
-                #myGotoRepoButton:hover, #myResetButton:hover {
+                #myDownloadButton:hover, #myGotoRepoButton:hover, #myResetButton:hover {
                     transform: scale(1.1);
+                }
+
+                #myDownloadButton:disabled, #myGotoRepoButton:disabled, #myResetButton:disabled {
+                    background: gray;
+                    color: #aaa;
+                    cursor: not-allowed;
+                    transform: none;
                 }
             `);
         }
@@ -362,19 +368,14 @@
             this.floatWindow.appendChild(optionContainer);
 
             // 添加选项
-            this.addOption(
-                "parallelDownload",
-                "批量并行下载模式（下载乱序，但可以添加前缀弥补）",
-                false,
-                optionContainer
-            );
+            this.addOption("parallelDownload", "批量并行下载模式", true, optionContainer);
             this.addOption(
                 "fastDownload",
                 "批量高速下载模式（有代码块语言无法识别等问题，能接受就开）",
                 false,
                 optionContainer
             );
-            this.addOption("addSerialNumber", "批量文章文件加入序号前缀", false, optionContainer);
+            this.addOption("addSerialNumber", "批量文章文件加入序号前缀", true, optionContainer);
             this.addOption("zipCategories", "下载为压缩包", true, optionContainer, {
                 false: [{ id: "saveWebImages", value: false }],
             });
@@ -604,6 +605,7 @@
             this.downloadButton.disabled = false;
             this.downloadButton.innerHTML =
                 "下载CSDN文章为Markdown<br>（支持专栏、文章、用户全部文章页面）<br>（推荐使用typora打开下载的Markdown）";
+            this.resetButton.disabled = false;
             this.optionCheckBoxList.forEach((optionElem) => {
                 optionElem.disabled = false;
             });
@@ -613,8 +615,9 @@
          * 禁用悬浮窗
          */
         disableFloatWindow() {
-            this.downloadButton.disabled = true;
             this.downloadButton.innerHTML = "正在下载，请稍候...";
+            this.downloadButton.disabled = true;
+            this.resetButton.disabled = true;
             this.optionCheckBoxList.forEach((optionElem) => {
                 optionElem.disabled = true;
             });
@@ -627,22 +630,23 @@
          */
         showFloatTip(text, timeout = 0) {
             if (document.getElementById("myInfoFloatTip")) {
-                document.getElementById("myInfoFloatTip").remove();
+                document.getElementById("myInfoFloatTip").innerHTML = text;
+            } else {
+                const floatTip = document.createElement("div");
+                floatTip.style.position = "fixed";
+                floatTip.style.top = "40%";
+                floatTip.style.left = "50%";
+                floatTip.style.transform = "translateX(-50%)";
+                floatTip.style.padding = "10px";
+                floatTip.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
+                floatTip.style.color = "#fff";
+                floatTip.style.borderRadius = "5px";
+                floatTip.style.boxShadow = "0 2px 5px rgba(0, 0, 0, 0.5)";
+                floatTip.style.zIndex = "9999";
+                floatTip.innerHTML = text;
+                floatTip.id = "myInfoFloatTip";
+                document.body.appendChild(floatTip);
             }
-            const floatTip = document.createElement("div");
-            floatTip.style.position = "fixed";
-            floatTip.style.top = "40%";
-            floatTip.style.left = "50%";
-            floatTip.style.transform = "translateX(-50%)";
-            floatTip.style.padding = "10px";
-            floatTip.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
-            floatTip.style.color = "#fff";
-            floatTip.style.borderRadius = "5px";
-            floatTip.style.boxShadow = "0 2px 5px rgba(0, 0, 0, 0.5)";
-            floatTip.style.zIndex = "9999";
-            floatTip.innerHTML = text;
-            floatTip.id = "myInfoFloatTip";
-            document.body.appendChild(floatTip);
 
             if (timeout > 0) {
                 setTimeout(() => {
@@ -851,7 +855,8 @@
             }
 
             // 获取图片的Blob对象
-            const blob = await this.fetchImageAsBlob(imgUrl);
+            // const blob = await this.fetchImageAsBlob(imgUrl);
+            const blob = this.fetchImageAsBlob(imgUrl); // Promise返回的Blob对象，需要等到打包时进行等待
 
             // 添加到文件队列
             this.fileQueue.push({ filename, content: blob, type: blob.type, index });
@@ -863,25 +868,37 @@
         /**
          * 获取网络资源
          * @param {string} url - 资源URL
+         * @param {number} retryCount - 重试次数，默认值为3
          * @returns {Promise<Blob>} 资源Blob对象
          */
-        async fetchImageAsBlob(url) {
+        async fetchImageAsBlob(url, retryCount = 3) {
             return new Promise((resolve, reject) => {
-                GM_xmlhttpRequest({
-                    method: "GET",
-                    url: url,
-                    responseType: "blob",
-                    onload: function (response) {
-                        if (response.status === 200) {
-                            resolve(response.response);
-                        } else {
-                            reject(`Failed to fetch resource: ${url}`);
-                        }
-                    },
-                    onerror: function () {
-                        reject(`Error fetching resource: ${url}`);
-                    },
-                });
+                function attemptFetch(remaining) {
+                    GM_xmlhttpRequest({
+                        method: "GET",
+                        url: url,
+                        responseType: "blob",
+                        onload: function (response) {
+                            if (response.status === 200) {
+                                resolve(response.response);
+                            } else {
+                                if (remaining > 0) {
+                                    attemptFetch(remaining - 1);
+                                } else {
+                                    reject(`Failed to fetch resource: ${url}`);
+                                }
+                            }
+                        },
+                        onerror: function () {
+                            if (remaining > 0) {
+                                attemptFetch(remaining - 1);
+                            } else {
+                                reject(`Error fetching resource: ${url}`);
+                            }
+                        },
+                    });
+                }
+                attemptFetch(retryCount);
             });
         }
 
@@ -945,7 +962,7 @@
          * 将文件队列打包为ZIP下载
          * @param {string} zipName - ZIP文件名
          */
-        async saveAllFileToZip(zipName) {
+        async saveAllFileToZip(zipName, progressCallback = null, finalCallback = null) {
             if (this.fileQueue.length === 0) {
                 console.error("没有文件需要保存");
                 return;
@@ -954,14 +971,59 @@
             zipName = Utils.safeFilename(zipName);
             // 创建JSZip实例
             const zip = new JSZip();
-            this.fileQueue.forEach((file) => {
+
+            // 使用 for...of 循环替代 forEach，以便正确处理 async/await
+            for (let idx = 0; idx < this.fileQueue.length; idx++) {
+                let status = true;
+                const file = this.fileQueue[idx];
+                // content 可能是 promise（Blob对象），需要等待
+                if (file.content instanceof Promise) {
+                    if (progressCallback) {
+                        progressCallback(`正在下载资源：${file.filename} (${idx + 1}/${this.fileQueue.length})`);
+                    }
+                    try {
+                        file.content = await file.content; // 等待Blob对象
+                    } catch (err) {
+                        if (progressCallback) {
+                            progressCallback(`下载资源失败：${err}`);
+                        }
+                        status = false;
+                    }
+                }
+                if (!status) {
+                    continue; // 如果下载失败，跳过当前文件
+                }
                 // 将文件添加到ZIP中
                 zip.file(file.filename, file.content);
-            });
+            }
+
+            // 获取当前时间，以便计算剩余时间
+            const startTime = Date.now();
 
             // 生成ZIP文件
-            zip.generateAsync({ type: "blob" })
+            zip.generateAsync({ type: "blob" }, (metadata) => {
+                // 进度回调
+                if (progressCallback) {
+                    // metadata.percent: 当前进度百分比
+                    // metadata.currentFile: 当前正在处理的文件名
+                    progressCallback(
+                        `正在打包：${metadata.currentFile} (${Math.round(
+                            metadata.percent
+                        )}%)(剩余时间：${Utils.formatSeconds(
+                            ((Date.now() - startTime) / 1000 / metadata.percent) * (100 - metadata.percent)
+                        )})`
+                    );
+                }
+            })
                 .then((blob) => {
+                    // 调用最终回调
+                    if (finalCallback) {
+                        finalCallback(
+                            `打包完成：${zipName}.zip，文件大小：${(blob.size / 1024 / 1024).toFixed(
+                                2
+                            )} MB\n请等待下载完成。`
+                        );
+                    }
                     // 创建下载链接
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement("a");
@@ -971,11 +1033,20 @@
                     a.click();
                     document.body.removeChild(a);
                     URL.revokeObjectURL(url);
-
-                    this.fileQueue = [];
+                    this.clearFileQueue(); // 清空文件队列
+                    this.clearImageCache(); // 清空图片缓存
+                    this.saveWebImageToLocal_lock.release(); // 释放锁
                 })
                 .catch((error) => {
+                    // 处理错误
                     console.error("Error generating ZIP file:", error);
+                    if (finalCallback) {
+                        finalCallback(`下载失败：${zipName}.zip，错误信息：${error}`);
+                        throw new Error(`下载失败：${zipName}.zip，错误信息：${error}`);
+                    }
+                    this.saveWebImageToLocal_lock.release(); // 释放锁
+                    this.clearFileQueue(); // 清空文件队列
+                    this.clearImageCache(); // 清空图片缓存
                 });
         }
 
@@ -1768,7 +1839,7 @@
                             ""
                         );
                     }
-                    this.uiManager.showFloatTip("文章下载完毕。如果图片较多，可能需额外等待一会直到浏览器发起下载。", 4000);
+                    this.uiManager.showFloatTip("文章下载完毕！", 4000);
                 } else if (url.includes("type=blog")) {
                     // 用户全部文章
                     url_type = "user_articles";
@@ -1849,14 +1920,16 @@
                                 GM_info.script.version
                             }\`\n- 脚本配置：\n\`\`\`json\n${JSON.stringify(script_config, null, 4)}\n\`\`\`\n`
                         ),
-                        this.uiManager.showFloatTip("感谢您的反馈！", 2000),
+                    this.uiManager.showFloatTip("感谢您的反馈！", 2000),
                     () => {
                         this.uiManager.showFloatTip("已取消。", 2000);
                         console.error("下载文章时出错：", error);
                     }
                 );
             } finally {
-                this.uiManager.enableFloatWindow();
+                if (!GM_getValue("zipCategories")) {
+                    this.uiManager.enableFloatWindow();
+                }
                 this.fileManager.reset(); // 重置FileManager
             }
         }
@@ -1883,7 +1956,7 @@
 
             let mode = GM_getValue("parallelDownload") ? "并行" : "串行";
             mode += GM_getValue("fastDownload") ? "快速" : "完整";
-            this.uiManager.showFloatTip(`正在以${mode}模式下载文章：` + articleTitle);
+            this.uiManager.showFloatTip(`正在以${mode}模式解析文章：` + articleTitle);
 
             if (url === "") {
                 url = window.location.href;
@@ -1943,7 +2016,16 @@
             await this.fileManager.saveTextAsFile(markdown, saveFileName, index);
 
             if (getZip) {
-                await this.fileManager.saveAllFileToZip(`${prefix}${articleTitle}`);
+                await this.fileManager.saveAllFileToZip(
+                    `${prefix}${articleTitle}`,
+                    (info_string) => {
+                        this.uiManager.showFloatTip(info_string);
+                    },
+                    (info_string) => {
+                        this.uiManager.enableFloatWindow();
+                        this.uiManager.showFloatTip(info_string, 3000);
+                    }
+                );
             }
         }
 
@@ -1992,7 +2074,7 @@
          * @param {string} url - 文章URL
          * @param {string} prefix - 文件前缀
          */
-        async downloadArticleFromBatchURL(url, prefix = "") {
+        async downloadArticleFromURL(url, prefix = "") {
             // if (!(GM_getValue("addSerialNumber") || GM_getValue("addSerialNumberToTitle"))) {
             //     prefix = "";
             // }
@@ -2049,9 +2131,7 @@
                 this.uiManager.showFloatTip("没有找到文章。");
                 return;
             } else {
-                this.uiManager.showFloatTip(
-                    `找到 ${url_list.length} 篇文章。开始下载...（预计时间：${Math.round(url_list.length * 0.6)} 秒）`
-                );
+                this.uiManager.showFloatTip(`找到 ${url_list.length} 篇文章。开始解析...`);
             }
 
             // 下载每篇文章
@@ -2059,7 +2139,7 @@
             if (GM_getValue("parallelDownload")) {
                 await Promise.all(
                     url_list.map((url, index) =>
-                        this.downloadArticleFromBatchURL(
+                        this.downloadArticleFromURL(
                             url,
                             `${String(url_list.length - index).padStart(prefixMaxLength, "0")}_`
                         )
@@ -2067,7 +2147,7 @@
                 );
             } else {
                 for (let i = 0; i < url_list.length; i++) {
-                    await this.downloadArticleFromBatchURL(
+                    await this.downloadArticleFromURL(
                         url_list[i],
                         `${String(url_list.length - i).padStart(prefixMaxLength, "0")}_`
                     );
@@ -2100,10 +2180,15 @@
             }
 
             if (GM_getValue("zipCategories")) {
-                await this.fileManager.saveAllFileToZip(`${document.title}`);
-                this.uiManager.showFloatTip(
-                    `专栏文章全部处理完毕，请等待打包。（预计时间： ${Math.round(url_list.length * 0.25)} 秒）`,
-                    url_list.length * 250
+                await this.fileManager.saveAllFileToZip(
+                    `${document.title}`,
+                    (info_string) => {
+                        this.uiManager.showFloatTip(info_string);
+                    },
+                    (info_string) => {
+                        this.uiManager.enableFloatWindow();
+                        this.uiManager.showFloatTip(info_string, 3000);
+                    }
                 );
             } else {
                 if (GM_getValue("mergeArticleContent")) {
@@ -2153,9 +2238,7 @@
             if (url_list.length === 0) {
                 this.uiManager.showFloatTip("没有找到文章。");
             } else {
-                this.uiManager.showFloatTip(
-                    `找到 ${url_list.length} 篇文章。开始下载...（预计时间：${Math.round(url_list.length * 0.6)} 秒）`
-                );
+                this.uiManager.showFloatTip(`找到 ${url_list.length} 篇文章。开始解析...`);
             }
 
             // 下载每篇文章
@@ -2163,7 +2246,7 @@
             if (GM_getValue("parallelDownload")) {
                 await Promise.all(
                     url_list.map((url, index) =>
-                        this.downloadArticleFromBatchURL(
+                        this.downloadArticleFromURL(
                             url,
                             `${String(url_list.length - index).padStart(prefixMaxLength, "0")}_`
                         )
@@ -2171,7 +2254,7 @@
                 );
             } else {
                 for (let i = 0; i < url_list.length; i++) {
-                    await this.downloadArticleFromBatchURL(
+                    await this.downloadArticleFromURL(
                         url_list[i],
                         `${String(url_list.length - i).padStart(prefixMaxLength, "0")}_`
                     );
@@ -2192,10 +2275,15 @@
             }
 
             if (GM_getValue("zipCategories")) {
-                await this.fileManager.saveAllFileToZip(`${document.title}`);
-                this.uiManager.showFloatTip(
-                    `用户全部文章处理完毕，请等待打包。（预计时间： ${Math.round(url_list.length * 0.5)} 秒）`,
-                    url_list.length * 250
+                await this.fileManager.saveAllFileToZip(
+                    `${document.title}`,
+                    (info_string) => {
+                        this.uiManager.showFloatTip(info_string);
+                    },
+                    (info_string) => {
+                        this.uiManager.enableFloatWindow();
+                        this.uiManager.showFloatTip(info_string, 3000);
+                    }
                 );
             } else {
                 if (GM_getValue("mergeArticleContent")) {
