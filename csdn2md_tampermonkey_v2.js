@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      2.1.3
+// @version      2.1.4
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -184,7 +184,7 @@
             this.optionDivList = [];
             this.optionCheckBoxList = [];
             this.isOpen = false;
-
+            this.repo_url = "https://github.com/Qalxry/csdn2md";
             this.initStyles();
             this.initUI();
             this.setupEventListeners();
@@ -470,7 +470,7 @@
 
             // GitHub按钮点击事件
             this.gotoRepoButton.addEventListener("click", () => {
-                window.open("https://github.com/Qalxry/csdn2md");
+                window.open(this.repo_url, "_blank");
             });
 
             // 拖拽功能
@@ -649,6 +649,105 @@
                     this.hideFloatTip();
                 }, timeout);
             }
+        }
+
+        /**
+         * 显示一个确认对话框
+         * @param {string} message - 提示信息
+         * @param {function} onConfirm - 确认回调
+         * @param {function} onCancel - 取消回调
+         */
+        showConfirmDialog(message, onConfirm, onCancel) {
+            // 创建遮罩层
+            const overlay = document.createElement("div");
+            overlay.style.position = "fixed";
+            overlay.style.top = "0";
+            overlay.style.left = "0";
+            overlay.style.width = "100vw";
+            overlay.style.height = "100vh";
+            overlay.style.background = "rgba(0,0,0,0.3)";
+            overlay.style.zIndex = "10000";
+            overlay.id = "tm_confirm_overlay";
+
+            // 创建对话框
+            const dialog = document.createElement("div");
+            dialog.style.position = "fixed";
+            dialog.style.top = "50%";
+            dialog.style.left = "50%";
+            dialog.style.transform = "translate(-50%, -50%)";
+            dialog.style.background = "#fff";
+            dialog.style.padding = "24px 32px";
+            dialog.style.borderRadius = "12px";
+            dialog.style.boxShadow = "0 4px 24px rgba(0,0,0,0.18)";
+            dialog.style.textAlign = "center";
+            dialog.style.minWidth = "420px";
+            dialog.style.maxWidth = "90vw";
+            dialog.style.wordBreak = "break-all";
+
+            // 提示文本
+            const msg = document.createElement("div");
+            msg.innerHTML = message.replace(/\n/g, "<br>");
+            msg.style.marginBottom = "18px";
+            msg.style.textAlign = "left"; // 向左对齐
+            dialog.appendChild(msg);
+
+            // 按钮容器
+            const btnBox = document.createElement("div");
+            btnBox.style.display = "flex";
+            btnBox.style.justifyContent = "center";
+            btnBox.style.gap = "18px";
+
+            // 确认按钮
+            const okBtn = document.createElement("button");
+            okBtn.textContent = "确定";
+            okBtn.style.padding = "6px 18px";
+            okBtn.style.background = "linear-gradient(135deg, #12c2e9 0%, #c471ed 50%, #f64f59 100%)";
+            okBtn.style.color = "#fff";
+            okBtn.style.border = "none";
+            okBtn.style.borderRadius = "5px";
+            okBtn.style.cursor = "pointer";
+            okBtn.style.transition = "all 0.3s ease";
+            okBtn.onmouseover = () => {
+                okBtn.style.transform = "scale(1.05)";
+            };
+            okBtn.onmouseout = () => {
+                okBtn.style.transform = "scale(1)";
+            };
+            okBtn.onclick = () => {
+                document.body.removeChild(overlay);
+                if (typeof onConfirm === "function") onConfirm();
+            };
+
+            // 取消按钮
+            const cancelBtn = document.createElement("button");
+            cancelBtn.textContent = "取消";
+            cancelBtn.style.padding = "6px 18px";
+            cancelBtn.style.background = "#ccc";
+            cancelBtn.style.color = "#333";
+            cancelBtn.style.border = "none";
+            cancelBtn.style.borderRadius = "5px";
+            cancelBtn.style.cursor = "pointer";
+            cancelBtn.onclick = () => {
+                document.body.removeChild(overlay);
+                if (typeof onCancel === "function") onCancel();
+            };
+
+            btnBox.appendChild(cancelBtn);
+            btnBox.appendChild(okBtn);
+            dialog.appendChild(btnBox);
+            overlay.appendChild(dialog);
+            document.body.appendChild(overlay);
+        }
+
+        /**
+         * 跳转到 GitHub issue 页面，并将信息参数化到 URL 中
+         * @param {string} info - 要传递的信息
+         */
+        gotoGithubIssue(title, info) {
+            const url = `${this.repo_url}/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(
+                info
+            )}`;
+            window.open(url, "_blank");
         }
 
         /**
@@ -1643,12 +1742,14 @@
         async runMain() {
             this.uiManager.disableFloatWindow();
             const url = window.location.href;
-
+            let url_type = "unknown";
             try {
                 if (url.includes("category")) {
                     // 专栏
+                    url_type = "category";
                     await this.downloadCSDNCategoryToMarkdown();
                 } else if (url.includes("article/details")) {
+                    url_type = "article";
                     // 文章
                     if (GM_getValue("mergeArticleContent")) {
                         GM_setValue("mergeArticleContent", false);
@@ -1667,15 +1768,93 @@
                             ""
                         );
                     }
-                    this.uiManager.showFloatTip("文章下载完成。", 3000);
+                    this.uiManager.showFloatTip("文章下载完毕。如果图片较多，可能需额外等待一会直到浏览器发起下载。", 4000);
                 } else if (url.includes("type=blog")) {
                     // 用户全部文章
+                    url_type = "user_articles";
                     await this.downloadAllArticlesOfUserToMarkdown();
                 } else {
-                    alert("无法识别的页面。");
+                    alert("无法识别的页面。请确保在CSDN文章页面、专栏文章列表页面或用户全部文章列表页面。");
                 }
             } catch (error) {
-                this.uiManager.showFloatTip(`下载文章时出错，错误信息：\n${error.message}`);
+                // 使用对话框
+                const now = new Date();
+                const timeStr = now
+                    .toISOString()
+                    .replace("T", " ")
+                    .replace(/\.\d+Z$/, "");
+
+                const script_config = {};
+                this.uiManager.optionCheckBoxList.forEach((optionElem) => {
+                    script_config[optionElem.id.replace("Checkbox", "")] = optionElem.checked;
+                });
+
+                // More detailed error capturing with formatted stack trace
+                let errorDetails = "";
+                if (error instanceof Error) {
+                    errorDetails += `name: ${error.name}\n`;
+                    errorDetails += `message: ${error.message}\n`;
+
+                    // Format stack trace to be more readable
+                    if (error.stack) {
+                        errorDetails += "stack trace:\n";
+                        const stackLines = error.stack.split("\n");
+
+                        // Process each line of the stack trace
+                        stackLines.forEach((line) => {
+                            // Extract the relevant parts from each stack line
+                            const match = line.match(/([^@\s]+)@(.*?):(\d+):(\d+)/);
+                            if (match) {
+                                const [_, functionName, filePath, lineNum, colNum] = match;
+
+                                // Get just the filename from the path
+                                const fileName = filePath.split("/").pop().split("?")[0];
+
+                                // filename 里被编码为url的特殊字符需要解码，以便查看
+                                const decodedFileName = decodeURIComponent(fileName);
+
+                                // Add formatted line to error details
+                                errorDetails += `  → func:${functionName} (file:${decodedFileName}@line:${lineNum}@col:${colNum})\n`;
+                            } else {
+                                // For lines that don't match the pattern, include them as is
+                                errorDetails += `  ${line.trim()}\n`;
+                            }
+                        });
+                    }
+
+                    // Capture custom properties
+                    for (const key in error) {
+                        if (
+                            Object.prototype.hasOwnProperty.call(error, key) &&
+                            key !== "stack" &&
+                            key !== "message" &&
+                            key !== "name"
+                        ) {
+                            errorDetails += `${key}: ${JSON.stringify(error[key])}\n`;
+                        }
+                    }
+                } else if (typeof error === "object" && error !== null) {
+                    errorDetails = JSON.stringify(error, null, 2);
+                } else {
+                    errorDetails = String(error);
+                }
+                errorDetails = errorDetails.trim();
+
+                this.uiManager.showConfirmDialog(
+                    `下载文章时出错！是否前往Github提交Issue以告知开发者进行修复？（您需要拥有Github账号）\n错误详情：\n${errorDetails}`,
+                    () =>
+                        this.uiManager.gotoGithubIssue(
+                            `[BUG] 下载失败 (${url_type}页面)`,
+                            `#### 时间\n\n${timeStr}\n\n#### 错误内容\n\n\`\`\`\n${errorDetails}\n\`\`\`\n\n#### 其他信息\n\n- URL：\`${url}\`\n- 脚本版本：\`${
+                                GM_info.script.version
+                            }\`\n- 脚本配置：\n\`\`\`json\n${JSON.stringify(script_config, null, 4)}\n\`\`\`\n`
+                        ),
+                        this.uiManager.showFloatTip("感谢您的反馈！", 2000),
+                    () => {
+                        this.uiManager.showFloatTip("已取消。", 2000);
+                        console.error("下载文章时出错：", error);
+                    }
+                );
             } finally {
                 this.uiManager.enableFloatWindow();
                 this.fileManager.reset(); // 重置FileManager
