@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      2.1.5
+// @version      2.1.6
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -115,6 +115,28 @@
             const secs = Math.floor(seconds % 60);
             const pad = (num) => num.toString().padStart(2, "0");
             return `${pad(hrs)}:${pad(mins)}:${pad(secs)}`;
+        },
+
+        async parallelPool(poolLimit, array, iteratorFn) {
+            const ret = []; // 存储所有任务
+            const executing = []; // 存储正在执行的任务
+            let index = 0;
+            for (const item of array) {
+                const currentIndex = index++;
+                const p = Promise.resolve().then(() => iteratorFn(item, currentIndex));
+                ret.push(p);
+
+                if (poolLimit <= array.length) {
+                    const e = p.then(() => executing.splice(executing.indexOf(e), 1));
+                    executing.push(e);
+
+                    if (executing.length >= poolLimit) {
+                        await Promise.race(executing);
+                    }
+                }
+            }
+
+            return Promise.all(ret);
         },
     };
 
@@ -389,11 +411,23 @@
             );
             this.addOption(
                 "saveWebImages",
-                "将图片保存到与MD文件同名的文件夹内，以相对路径使用",
+                "将图片保存至本地（默认保存到与md文件同名的文件夹，以相对路径使用）",
                 true,
                 optionContainer,
                 {
                     true: [{ id: "zipCategories", value: true }],
+                }
+            );
+            this.addOption(
+                "saveAllImagesToAssets",
+                "将图片保存统一保存到assets文件夹内，以相对路径使用",
+                false,
+                optionContainer,
+                {
+                    true: [
+                        { id: "zipCategories", value: true },
+                        { id: "saveWebImages", value: true },
+                    ],
                 }
             );
             this.addOption("forceImageCentering", "全部图片居中排版", false, optionContainer);
@@ -808,7 +842,7 @@
          * @param {boolean} reset - 是否重置计数器
          * @returns {Promise<string>} 本地图片路径
          */
-        async saveWebImageToLocal(imgUrl, mdAssetDirName) {
+        async saveWebImageToLocal(imgUrl, mdAssetDirName, img_prefix = "") {
             if (GM_getValue("mergeArticleContent")) {
                 // 避免多篇文章合并时，异步操作导致索引错乱，所以加锁
                 await this.saveWebImageToLocal_lock.acquire();
@@ -822,20 +856,22 @@
             // 清理URL
             imgUrl = Utils.clearUrl(imgUrl);
 
+            const imgOwner = img_prefix + mdAssetDirName;
+
             // 初始化
-            if (!this.imageCount[mdAssetDirName]) {
-                this.imageSet[mdAssetDirName] = {};
-                this.imageCount[mdAssetDirName] = 0;
+            if (!this.imageCount[imgOwner]) {
+                this.imageSet[imgOwner] = {};
+                this.imageCount[imgOwner] = 0;
             }
 
             // 检查是否已保存过该图片
-            if (this.imageSet[mdAssetDirName][imgUrl]) {
-                return this.imageSet[mdAssetDirName][imgUrl];
+            if (this.imageSet[imgOwner][imgUrl]) {
+                return this.imageSet[imgOwner][imgUrl];
             }
 
             // 记录图片数量
-            this.imageCount[mdAssetDirName]++;
-            const index = this.imageCount[mdAssetDirName];
+            this.imageCount[imgOwner]++;
+            const index = this.imageCount[imgOwner];
             let ext = imgUrl.split(".").pop();
             const allowedExt = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "ico", "avif"];
             if (!allowedExt.includes(ext)) {
@@ -844,10 +880,10 @@
             } else {
                 ext = `.${ext}`;
             }
-            const filename = `${mdAssetDirName}/${index}${ext}`;
+            const filename = `${mdAssetDirName}/${img_prefix}${index}${ext}`;
 
             // 记录已保存的图片
-            this.imageSet[mdAssetDirName][imgUrl] = `./${filename}`;
+            this.imageSet[imgOwner][imgUrl] = `./${filename}`;
 
             // 释放锁
             if (GM_getValue("mergeArticleContent")) {
@@ -1081,6 +1117,11 @@
      * 将HTML转换为Markdown
      */
     class MarkdownConverter {
+        /**
+         * @param {FileManager} fileManager - 文件管理实例
+         *
+         * @constructor
+         **/
         constructor(fileManager) {
             this.fileManager = fileManager;
         }
@@ -1092,7 +1133,7 @@
          * @param {boolean} enableTOC - 是否启用目录
          * @returns {Promise<string>} Markdown内容
          */
-        async htmlToMarkdown(articleElement, mdAssetDirName = "", enableTOC = true) {
+        async htmlToMarkdown(articleElement, mdAssetDirName = "", enableTOC = true, img_prefix = "") {
             // 预定义的特殊字段
             const CONSTANT_DOUBLE_NEW_LINE = "<|CSDN2MD@CONSTANT_DOUBLE_NEW_LINE@23hy7b|>";
             const SEPARATION_BEAUTIFICATION = "<|CSDN2MD@SEPARATION_BEAUTIFICATION@2caev2|>";
@@ -1326,7 +1367,11 @@
                                             result += " ";
                                         }
                                         if (GM_getValue("saveWebImages")) {
-                                            src = await this.fileManager.saveWebImageToLocal(src, mdAssetDirName);
+                                            src = await this.fileManager.saveWebImageToLocal(
+                                                src,
+                                                mdAssetDirName,
+                                                img_prefix
+                                            );
                                         }
                                         if (height && GM_getValue("enableImageSize")) {
                                             // 如果 height 是数字，则添加 px
@@ -1965,8 +2010,11 @@
 
             let markdown = await this.markdownConverter.htmlToMarkdown(
                 htmlInput,
-                GM_getValue("mergeArticleContent") ? "assets" : `${prefix}${articleTitle}`,
-                !GM_getValue("mergeArticleContent")
+                GM_getValue("mergeArticleContent") || GM_getValue("saveAllImagesToAssets")
+                    ? "assets"
+                    : `${prefix}${articleTitle}`,
+                !GM_getValue("mergeArticleContent"),
+                GM_getValue("saveAllImagesToAssets") ? prefix : ""
             );
 
             if (GM_getValue("addArticleInfoInBlockquote")) {
@@ -2137,13 +2185,22 @@
             // 下载每篇文章
             const prefixMaxLength = url_list.length.toString().length;
             if (GM_getValue("parallelDownload")) {
-                await Promise.all(
-                    url_list.map((url, index) =>
+                // await Promise.all(
+                //     url_list.map((url, index) =>
+                //         this.downloadArticleFromURL(
+                //             url,
+                //             `${String(url_list.length - index).padStart(prefixMaxLength, "0")}_`
+                //         )
+                //     )
+                // );
+                await Utils.parallelPool(
+                    30, // 并行解析的数量
+                    url_list,
+                    (url, index) =>
                         this.downloadArticleFromURL(
                             url,
                             `${String(url_list.length - index).padStart(prefixMaxLength, "0")}_`
                         )
-                    )
                 );
             } else {
                 for (let i = 0; i < url_list.length; i++) {
@@ -2244,13 +2301,22 @@
             // 下载每篇文章
             const prefixMaxLength = url_list.length.toString().length;
             if (GM_getValue("parallelDownload")) {
-                await Promise.all(
-                    url_list.map((url, index) =>
+                // await Promise.all(
+                //     url_list.map((url, index) =>
+                //         this.downloadArticleFromURL(
+                //             url,
+                //             `${String(url_list.length - index).padStart(prefixMaxLength, "0")}_`
+                //         )
+                //     )
+                // );
+                await Utils.parallelPool(
+                    30, // 并行解析的数量
+                    url_list,
+                    (url, index) =>
                         this.downloadArticleFromURL(
                             url,
                             `${String(url_list.length - index).padStart(prefixMaxLength, "0")}_`
                         )
-                    )
                 );
             } else {
                 for (let i = 0; i < url_list.length; i++) {
