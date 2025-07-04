@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      2.1.7
+// @version      2.1.8
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -10,7 +10,7 @@
 // @grant        GM_getValue
 // @grant        GM_addStyle
 // @grant        GM_xmlhttpRequest
-// @run-at       document-end
+// @run-at       document-idle
 // @license      PolyForm Strict License 1.0.0  https://polyformproject.org/licenses/strict/1.0.0/
 // @supportURL   https://github.com/Qalxry/csdn2md
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js
@@ -117,7 +117,7 @@
             return `${pad(hrs)}:${pad(mins)}:${pad(secs)}`;
         },
 
-        async parallelPool(array, iteratorFn, poolLimit = 8) {
+        async parallelPool(array, iteratorFn, poolLimit = 10) {
             const ret = []; // 存储所有任务
             const executing = []; // 存储正在执行的任务
             let index = 0;
@@ -1853,13 +1853,13 @@
         }
 
         /**
-         * 下载文章内容并转换为Markdown格式
+         * 解析网页并转换为Markdown格式
          * @param {Document} doc_body - 文章的body元素
          * @param {boolean} getZip - 是否下载为ZIP
          * @param {string} url - 文章URL
          * @param {string} prefix - 文件前缀
          */
-        async downloadCSDNArticleToMarkdown(doc_body, getZip = false, url = "", prefix = "") {
+        async parseArticle(doc_body, getZip = false, url = "", prefix = "") {
             const articleTitle = doc_body.querySelector("#articleContentId")?.textContent.trim() || "未命名文章";
             const articleInfo =
                 doc_body
@@ -1960,57 +1960,77 @@
          */
         async downloadArticleInIframe(url, prefix = "") {
             return new Promise((resolve, reject) => {
-                // 创建一个隐藏的iframe
-                const iframe = document.createElement("iframe");
-                // for debugging
-                // iframe.style.position = "fixed";
-                // iframe.style.top = "50%";
-                // iframe.style.left = "50%";
-                // iframe.style.transform = "translate(-50%, -50%)";
-                // iframe.style.width = "80vw";
-                // iframe.style.height = "80vh";
-                // iframe.style.zIndex = "99999";
-                // iframe.style.background = "#fff";
-                // iframe.style.boxShadow = "0 4px 24px rgba(0,0,0,0.18)";
-                // iframe.style.border = "2px solid #12c2e9";
-                // iframe.style.borderRadius = "12px";
-                // iframe.style.opacity = "0.6";
-                iframe.style.display = "none"; // 隐藏iframe
-                document.body.appendChild(iframe);
-                iframe.src = url;
+                const originalUrl = url; // 保存原始URL
+                let isRedirected = false; // 重置重定向标志
 
-                // 可能被 301 重定向，所以需要检测是否加载成功，抛出错误，避免卡住
-                const check = setTimeout(() => {
-                    document.body.removeChild(iframe);
-                    console.dir(new Error("无法加载文章页面"));
-                    reject(new Error(`加载文章页面异常: 30s内未加载成功。url: ${url}`));
-                }, 30000); // 30秒超时
+                const onCheckPassed = () => {
+                    // 创建一个隐藏的iframe
+                    const iframe = document.createElement("iframe");
+                    iframe.style.display = "none"; // 隐藏iframe
+                    document.body.appendChild(iframe);
+                    iframe.src = url;
 
-                // 监听iframe加载完成事件
-                iframe.onload = async () => {
-                    console.dir("iframe加载完成，开始下载文章：", url);
-                    try {
-                        const doc = iframe.contentDocument || iframe.contentWindow.document;
-                        clearTimeout(check); // 清除超时检查
-                        // 调用下载函数
-                        await this.downloadCSDNArticleToMarkdown(doc.body, false, url, prefix);
-                        // 移除iframe
+                    // 监听iframe加载完成事件
+                    iframe.onload = async () => {
+                        console.dir("iframe加载完成，开始下载文章：", url);
+                        try {
+                            const doc = iframe.contentDocument || iframe.contentWindow.document;
+                            // 调用解析函数
+                            await this.parseArticle(doc.body, false, url, prefix);
+                            // 移除iframe
+                            document.body.removeChild(iframe);
+                            resolve();
+                        } catch (error) {
+                            // 在发生错误时移除iframe并拒绝Promise
+                            document.body.removeChild(iframe);
+                            console.dir("(downloadArticleInIframe) 解析文章时出错：", error);
+                            error.message += `(downloadArticleInIframe) 解析文章时出错：Url: ${url} OriginalUrl: ${originalUrl} Redirected: ${isRedirected}`;
+                            reject(error);
+                        }
+                    };
+
+                    // 监听iframe加载错误事件
+                    iframe.onerror = (error) => {
                         document.body.removeChild(iframe);
-                        resolve();
-                    } catch (error) {
-                        // 在发生错误时移除iframe并拒绝Promise
-                        document.body.removeChild(iframe);
-                        console.dir("下载文章时出错：", error);
+                        console.dir("(downloadArticleInIframe) Iframe加载失败：", url, error);
+                        error.message += `(downloadArticleInIframe) Iframe加载失败：Url: ${url} OriginalUrl: ${originalUrl} Redirected: ${isRedirected}`;
                         reject(error);
-                    }
+                    };
                 };
 
-                // 监听iframe加载错误事件
-                iframe.onerror = () => {
-                    document.body.removeChild(iframe);
-                    console.dir("无法加载文章页面：", url);
-                    reject(new Error("无法加载文章页面: iframe error"));
-                };
+                // FIX: 使用 GM_xmlhttpRequest 检测是否存在重定向
+                // https://github.com/Qalxry/csdn2md/issues/6
+                // https://github.com/Qalxry/csdn2md/issues/7
+                GM_xmlhttpRequest({
+                    method: "HEAD",
+                    url: url,
+                    redirect: "manual", // 禁止自动重定向
+                    onload: function (response) {
+                        if (response.status === 301 || response.status === 302) {
+                            const redirectUrl = response.responseHeaders.match(/Location:\s*(.+)/i)?.[1];
+                            console.dir(`(downloadArticleInIframe) 检测到重定向: ${url} -> ${redirectUrl}`);
+                            isRedirected = true; // 设置重定向标志
+                            // 将 http 替换为 https
+                            url = redirectUrl.replace(/^http:\/\//, "https://");
+                        } else if (response.status !== 200) {
+                            console.dir(
+                                `(downloadArticleInIframe) 文章页面状态码异常：Url: ${url} Response Status: ${response.status}`
+                            );
+                            const error = new Error(
+                                `(downloadArticleInIframe) 文章页面状态码异常：Url: ${url} Response Status: ${response.status}`
+                            );
+                            reject(error);
+                        } else {
+                            console.dir("(downloadArticleInIframe) 文章页面加载成功：", url);
+                        }
+                        onCheckPassed(); // 检测通过，开始下载
+                    },
+                    onerror: function (error) {
+                        console.dir(`(downloadArticleInIframe) 无法加载文章页面：`, url, error);
+                        error.message += `(downloadArticleInIframe) 无法加载文章页面：Url: ${url}`;
+                        reject(error);
+                    },
+                });
             });
         }
 
@@ -2020,16 +2040,13 @@
          * @param {string} prefix - 文件前缀
          */
         async downloadArticleFromURL(url, prefix = "") {
-            // if (!(GM_getValue("addSerialNumber") || GM_getValue("addSerialNumberToTitle"))) {
-            //     prefix = "";
-            // }
             if (GM_getValue("fastDownload")) {
                 const response = await fetch(url);
                 const text = await response.text();
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(text, "text/html");
-                // 调用下载函数
-                await this.downloadCSDNArticleToMarkdown(doc.body, false, url, prefix);
+                // 调用解析函数
+                await this.parseArticle(doc.body, false, url, prefix);
             } else {
                 await this.downloadArticleInIframe(url, prefix);
             }
@@ -2038,7 +2055,7 @@
         /**
          * 下载专栏的全部文章为Markdown格式
          */
-        async downloadCSDNCategoryToMarkdown() {
+        async downloadCategory() {
             // 获取专栏id，注意url可能是/category_数字.html或/category_数字_数字.html，需要第一个数字
             this.uiManager.showFloatTip("正在获取专栏的全部文章链接...");
             const base_url = window.location.href;
@@ -2076,21 +2093,6 @@
                 return;
             } else {
                 this.uiManager.showFloatTip(`找到 ${url_list.length} 篇文章。开始解析...`);
-            }
-
-            // FIX: https://github.com/Qalxry/csdn2md/issues/6
-            // 用户id变更，需将链接里的id替换为当前用户id，否则iframe加载时会遇到301重定向到HTTP的新id页面，导致Mixed Content错误
-            const user_id_from_base_url = base_url.match(/\/([^\/]+)\/category_/)[1];
-            for (let i = 0; i < url_list.length; i++) {
-                const user_id_from_article = url_list[i].match(/\/([^\/]+)\/article/)[1];
-                if (user_id_from_article !== user_id_from_base_url) {
-                    // 用regex替换用户id
-                    url_list[i] = url_list[i].replace(
-                        `/${user_id_from_article}/article`,
-                        `/${user_id_from_base_url}/article`
-                    );
-                    console.dir(`已修正文章链接：${url_list[i]}，将用户id替换为当前用户id：${user_id_from_base_url}`);
-                }
             }
 
             // 下载每篇文章
@@ -2166,17 +2168,17 @@
         /**
          * 下载用户的全部文章为Markdown格式
          */
-        async downloadAllArticlesOfUserToMarkdown() {
+        async downloadUserAllArticles() {
             const mainContent = document.body.querySelector(".mainContent");
             const url_list = [];
 
             // 获取用户原始ID
             // <link rel="canonical" href="https://blog.csdn.net/yanglfree">
             async function getUrlListFromAPI() {
-                let user_id = document.querySelector("link[rel='canonical']")?.href.match(/\/([^\/]+)$/)[1];
+                let user_id = document.querySelector("link[rel='canonical']")?.href.match(/\/([^\/]+)$/)?.[1];
                 if (!user_id) {
                     console.dir(`Warning: 无法从canonical链接中获取用户ID。`);
-                    user_id = document.querySelector(".blog-second-rss-btn a")?.href.match(/\/([^\/]+)\/rss/)[1];
+                    user_id = document.querySelector(".blog-second-rss-btn a")?.href.match(/\/([^\/]+)\/rss/)?.[1];
                     if (!user_id) {
                         console.dir(`Warning: 无法从RSS链接中获取用户ID。`);
                         throw new Error("无法获取用户ID，请检查页面是否正确。");
@@ -2184,12 +2186,29 @@
                 }
                 // 使用 API 获取文章列表
                 // https://blog.csdn.net/community/home-api/v1/get-business-list?page=1&size=20&businessType=blog&orderby=&noMore=false&year=&month=&username=yanglfree
-                const response = await (
-                    await fetch(
-                        `https://blog.csdn.net/community/home-api/v1/get-business-list?page=1&size=1000000&businessType=blog&orderby=&noMore=false&year=&month=&username=${user_id}`
-                    )
-                ).json();
-                return response.data.list.map((item) => item.url);
+                const temp_url_list = [];
+                let total_articles = 0;
+                let page = 1;
+
+                do {
+                    console.dir(
+                        `正在获取第 ${page} 页文章链接: https://blog.csdn.net/community/home-api/v1/get-business-list?page=${page}&size=100&businessType=blog&orderby=&noMore=false&year=&month=&username=${user_id}`
+                    );
+                    const response = await (
+                        await fetch(
+                            `https://blog.csdn.net/community/home-api/v1/get-business-list?page=${page}&size=100&businessType=blog&orderby=&noMore=false&year=&month=&username=${user_id}`
+                        )
+                    ).json();
+                    if (total_articles === 0) total_articles = response.data.total;
+                    if (response.data.list.length === 0) break;
+                    temp_url_list.push(...response.data.list.map((item) => item.url));
+                    console.dir(
+                        `获取到第 ${page} 页 ${response.data.list.length} 篇文章链接 (${temp_url_list.length} / ${total_articles}):`
+                    );
+                    page++;
+                } while (temp_url_list.length < total_articles);
+
+                return temp_url_list;
             }
 
             try {
@@ -2198,7 +2217,7 @@
                     console.dir("从API获取文章列表失败，尝试从页面获取文章链接。", error);
                 } else {
                     url_list.push(...res);
-                    this.uiManager.showFloatTip(`从API获取到 ${url_list.length} 篇文章链接。`);
+                    console.dir(`从API获取到 ${url_list.length} 篇文章链接。`);
                 }
             } catch (error) {
                 console.dir("从API获取文章列表失败，尝试从页面获取文章链接。", error);
@@ -2239,22 +2258,6 @@
                 this.uiManager.showFloatTip("没有找到文章。");
             } else {
                 this.uiManager.showFloatTip(`找到 ${url_list.length} 篇文章。开始解析...`);
-            }
-
-            // FIX: https://github.com/Qalxry/csdn2md/issues/6
-            // 用户id变更，需将链接里的id替换为当前用户id，否则iframe加载时会遇到301重定向到HTTP的新id页面，导致Mixed Content错误
-            const base_url = window.location.href;
-            const user_id_from_base_url = base_url.match(/\/([^\/]+)\?type=blog/)[1];
-            for (let i = 0; i < url_list.length; i++) {
-                const user_id_from_article = url_list[i].match(/\/([^\/]+)\/article/)[1];
-                if (user_id_from_article !== user_id_from_base_url) {
-                    // 用regex替换用户id
-                    url_list[i] = url_list[i].replace(
-                        `/${user_id_from_article}/article`,
-                        `/${user_id_from_base_url}/article`
-                    );
-                    console.dir(`已修正文章链接：${url_list[i]}，将用户id替换为当前用户id：${user_id_from_base_url}`);
-                }
             }
 
             // 下载每篇文章
@@ -2315,125 +2318,125 @@
             }
         }
 
+        mainErrorHandler(error) {
+            // 使用对话框
+            const now = new Date();
+            const timeStr = now
+                .toISOString()
+                .replace("T", " ")
+                .replace(/\.\d+Z$/, "");
+
+            const script_config = {};
+            this.uiManager.optionCheckBoxList.forEach((optionElem) => {
+                script_config[optionElem.id.replace("Checkbox", "")] = optionElem.checked;
+            });
+
+            // More detailed error capturing with formatted stack trace
+            let errorDetails = "";
+            if (error instanceof Error) {
+                errorDetails += `name: ${error.name}\n`;
+                errorDetails += `message: ${error.message}\n`;
+
+                // Format stack trace to be more readable
+                if (error.stack) {
+                    errorDetails += "stack trace:\n";
+                    const stackLines = error.stack.split("\n");
+
+                    // Process each line of the stack trace
+                    stackLines.forEach((line) => {
+                        // Extract the relevant parts from each stack line
+                        const match = line.match(/([^@\s]+)@(.*?):(\d+):(\d+)/);
+                        if (match) {
+                            const [_, functionName, filePath, lineNum, colNum] = match;
+
+                            // Get just the filename from the path
+                            const fileName = filePath.split("/").pop().split("?")[0];
+
+                            // filename 里被编码为url的特殊字符需要解码，以便查看
+                            const decodedFileName = decodeURIComponent(fileName);
+
+                            // Add formatted line to error details
+                            errorDetails += `  → func:${functionName} (file:${decodedFileName}@line:${lineNum}@col:${colNum})\n`;
+                        } else {
+                            // For lines that don't match the pattern, include them as is
+                            errorDetails += `  ${line.trim()}\n`;
+                        }
+                    });
+                }
+
+                // Capture custom properties
+                for (const key in error) {
+                    if (
+                        Object.prototype.hasOwnProperty.call(error, key) &&
+                        key !== "stack" &&
+                        key !== "message" &&
+                        key !== "name"
+                    ) {
+                        errorDetails += `${key}: ${JSON.stringify(error[key])}\n`;
+                    }
+                }
+            } else if (typeof error === "object" && error !== null) {
+                errorDetails = JSON.stringify(error, null, 2);
+            } else {
+                errorDetails = String(error);
+            }
+            errorDetails = errorDetails.trim();
+
+            this.uiManager.showConfirmDialog(
+                `下载文章时出错！是否前往Github提交Issue以告知开发者进行修复？（您需要拥有Github账号）\n错误详情：\n${errorDetails}`,
+                () =>
+                    this.uiManager.gotoGithubIssue(
+                        `[BUG] 下载失败 (${getCurrentPageType()}页面)`,
+                        `#### 时间\n\n${timeStr}\n\n#### 错误内容\n\n\`\`\`\n${errorDetails}\n\`\`\`\n\n#### 其他信息\n\n- URL：\`${
+                            window.location.href
+                        }\`\n- 脚本版本：\`${GM_info.script.version}\`\n- 脚本配置：\n\`\`\`json\n${JSON.stringify(
+                            script_config,
+                            null,
+                            4
+                        )}\n\`\`\`\n`
+                    ),
+                this.uiManager.showFloatTip("感谢您的反馈！", 2000),
+                () => {
+                    this.uiManager.showFloatTip("已取消。", 2000);
+                    console.error("下载文章时出错：", error);
+                }
+            );
+        }
+
         /**
          * 主函数 - 下载文章入口
          */
         async runMain() {
             this.uiManager.disableFloatWindow();
-            const url = window.location.href;
-            let url_type = "unknown";
+            const url_type = getCurrentPageType();
             try {
-                if (url.includes("category")) {
-                    // 专栏
-                    url_type = "category";
-                    await this.downloadCSDNCategoryToMarkdown();
-                } else if (url.includes("article/details")) {
-                    url_type = "article";
-                    // 文章
-                    if (GM_getValue("mergeArticleContent")) {
+                switch (url_type) {
+                    case "unknown":
+                        alert("无法识别的页面。请确保在CSDN文章页面、专栏文章列表页面或用户全部文章列表页面。");
+                        break;
+                    case "article":
+                        // 文章页面
+                        // 由于单篇文章无需合并，所以这里需要将mergeArticleContent设置为false
+                        const mergeArticleContentSetting = GM_getValue("mergeArticleContent");
                         GM_setValue("mergeArticleContent", false);
-                        await this.downloadCSDNArticleToMarkdown(
+                        await this.parseArticle(
                             document.body,
                             GM_getValue("zipCategories"),
                             window.location.href,
                             ""
                         );
-                        GM_setValue("mergeArticleContent", true);
-                    } else {
-                        await this.downloadCSDNArticleToMarkdown(
-                            document.body,
-                            GM_getValue("zipCategories"),
-                            window.location.href,
-                            ""
-                        );
-                    }
-                    this.uiManager.showFloatTip("文章下载完毕！", 4000);
-                } else if (url.includes("type=blog")) {
-                    // 用户全部文章
-                    url_type = "user_articles";
-                    await this.downloadAllArticlesOfUserToMarkdown();
-                } else {
-                    alert("无法识别的页面。请确保在CSDN文章页面、专栏文章列表页面或用户全部文章列表页面。");
+                        GM_setValue("mergeArticleContent", mergeArticleContentSetting);
+                        this.uiManager.showFloatTip("文章下载完毕！", 4000);
+                        break;
+                    case "category":
+                        await this.downloadCategory();
+                        break;
+                    case "user_all_articles":
+                        await this.downloadUserAllArticles();
+                        break;
                 }
             } catch (error) {
-                // 使用对话框
-                const now = new Date();
-                const timeStr = now
-                    .toISOString()
-                    .replace("T", " ")
-                    .replace(/\.\d+Z$/, "");
-
-                const script_config = {};
-                this.uiManager.optionCheckBoxList.forEach((optionElem) => {
-                    script_config[optionElem.id.replace("Checkbox", "")] = optionElem.checked;
-                });
-
-                // More detailed error capturing with formatted stack trace
-                let errorDetails = "";
-                if (error instanceof Error) {
-                    errorDetails += `name: ${error.name}\n`;
-                    errorDetails += `message: ${error.message}\n`;
-
-                    // Format stack trace to be more readable
-                    if (error.stack) {
-                        errorDetails += "stack trace:\n";
-                        const stackLines = error.stack.split("\n");
-
-                        // Process each line of the stack trace
-                        stackLines.forEach((line) => {
-                            // Extract the relevant parts from each stack line
-                            const match = line.match(/([^@\s]+)@(.*?):(\d+):(\d+)/);
-                            if (match) {
-                                const [_, functionName, filePath, lineNum, colNum] = match;
-
-                                // Get just the filename from the path
-                                const fileName = filePath.split("/").pop().split("?")[0];
-
-                                // filename 里被编码为url的特殊字符需要解码，以便查看
-                                const decodedFileName = decodeURIComponent(fileName);
-
-                                // Add formatted line to error details
-                                errorDetails += `  → func:${functionName} (file:${decodedFileName}@line:${lineNum}@col:${colNum})\n`;
-                            } else {
-                                // For lines that don't match the pattern, include them as is
-                                errorDetails += `  ${line.trim()}\n`;
-                            }
-                        });
-                    }
-
-                    // Capture custom properties
-                    for (const key in error) {
-                        if (
-                            Object.prototype.hasOwnProperty.call(error, key) &&
-                            key !== "stack" &&
-                            key !== "message" &&
-                            key !== "name"
-                        ) {
-                            errorDetails += `${key}: ${JSON.stringify(error[key])}\n`;
-                        }
-                    }
-                } else if (typeof error === "object" && error !== null) {
-                    errorDetails = JSON.stringify(error, null, 2);
-                } else {
-                    errorDetails = String(error);
-                }
-                errorDetails = errorDetails.trim();
-
-                this.uiManager.showConfirmDialog(
-                    `下载文章时出错！是否前往Github提交Issue以告知开发者进行修复？（您需要拥有Github账号）\n错误详情：\n${errorDetails}`,
-                    () =>
-                        this.uiManager.gotoGithubIssue(
-                            `[BUG] 下载失败 (${url_type}页面)`,
-                            `#### 时间\n\n${timeStr}\n\n#### 错误内容\n\n\`\`\`\n${errorDetails}\n\`\`\`\n\n#### 其他信息\n\n- URL：\`${url}\`\n- 脚本版本：\`${
-                                GM_info.script.version
-                            }\`\n- 脚本配置：\n\`\`\`json\n${JSON.stringify(script_config, null, 4)}\n\`\`\`\n`
-                        ),
-                    this.uiManager.showFloatTip("感谢您的反馈！", 2000),
-                    () => {
-                        this.uiManager.showFloatTip("已取消。", 2000);
-                        console.error("下载文章时出错：", error);
-                    }
-                );
+                this.mainErrorHandler(error);
             } finally {
                 if (!GM_getValue("zipCategories")) {
                     this.uiManager.enableFloatWindow();
@@ -2443,8 +2446,34 @@
         }
     }
 
+    /**
+     * 判断当前页面类型
+     * @returns {"category"|"article"|"user_all_articles"|"unknown"}
+     */
+    function getCurrentPageType() {
+        const url = window.location.href;
+        if (url.includes("category")) {
+            return "category";
+        } else if (url.includes("article/details")) {
+            return "article";
+        } else if (url.includes("type=blog") || url.includes("type=lately")) {
+            return "user_all_articles";
+        } else {
+            return "unknown";
+        }
+    }
+
     // 初始化应用
     function initApp() {
+        // 确保在目标页面
+        if (getCurrentPageType() === "unknown") {
+            console.dir({
+                message: "当前页面不是CSDN文章页面、专栏文章列表页面或用户全部文章列表页面，脚本不会执行。",
+                url: window.location.href,
+            });
+            return;
+        }
+
         const fileManager = new FileManager();
         const markdownConverter = new MarkdownConverter(fileManager);
         const uiManager = new UIManager(fileManager);
