@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      2.1.9
+// @version      2.1.10
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -137,6 +137,36 @@
             }
 
             return Promise.all(ret);
+        },
+
+        /**
+         * 计算字符串的简单哈希值
+         * @param {string} str - 输入字符串
+         * @param {number} length - 返回的16进制字符串长度，默认为8
+         * @returns {string} 指定长度的16进制哈希字符串
+         */
+        simpleHash(str, length = 8) {
+            let hash = 0;
+            if (str.length === 0) return "0".repeat(length);
+
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = (hash << 5) - hash + char;
+                hash = hash & hash; // 转换为32位整数
+            }
+
+            // 转换为16进制并确保为正数
+            let hexHash = Math.abs(hash).toString(16);
+
+            // 如果长度不够，重复哈希直到达到要求长度
+            while (hexHash.length < length) {
+                hash = (hash << 5) - hash + hash;
+                hash = hash & hash;
+                hexHash += Math.abs(hash).toString(16);
+            }
+
+            // 截取到指定长度
+            return hexHash.substring(0, length);
         },
     };
 
@@ -807,7 +837,6 @@
             this.fileQueue = [];
             this.imageCount = {};
             this.imageSet = {};
-            this.saveWebImageToLocal_lock = new ReentrantAsyncLock(false);
         }
 
         /**
@@ -836,18 +865,57 @@
         }
 
         /**
+         * 将SVG内容保存到本地，添加到fileQueue，并返回本地路径
+         * @param {string} svgText - SVG内容
+         * @param {string} mdAssetDirName - 资源文件夹名
+         * @param {string} img_prefix - 图片前缀
+         * @returns {Promise<string>} 本地SVG路径
+         */
+        async saveSvgToLocal(svgText, mdAssetDirName, img_prefix = "") {
+            // 检查参数是否合法
+            if (typeof svgText !== "string") {
+                throw new Error("[saveSvgToLocal] Invalid argument: svgText must be a string.");
+            }
+
+            const imgOwner = img_prefix + mdAssetDirName;
+
+            // 初始化
+            if (!this.imageCount[imgOwner]) {
+                this.imageSet[imgOwner] = {};
+                this.imageCount[imgOwner] = 0;
+            }
+            // 检查是否已保存过该SVG（通过内容哈希）
+            const svgHash = Utils.simpleHash(svgText, 16); // 使用16位哈希
+            if (this.imageSet[imgOwner][svgHash]) {
+                return this.imageSet[imgOwner][svgHash];
+            }
+
+            // 记录图片数量
+            this.imageCount[imgOwner]++;
+            const index = this.imageCount[imgOwner];
+            const filename = `${mdAssetDirName}/${img_prefix}${index}.svg`;
+
+            // 记录已保存的SVG
+            this.imageSet[imgOwner][svgHash] = `./${filename}`;
+
+            // 创建SVG的Blob对象
+            const blob = new Blob([svgText], { type: "image/svg+xml" });
+
+            // 添加到文件队列
+            this.fileQueue.push({ filename, content: blob, type: "image/svg+xml", index });
+
+            // 返回本地路径
+            return `./${filename}`;
+        }
+
+        /**
          * 将网络图片保存到本地，添加到fileQueue，并返回本地路径
          * @param {string} imgUrl - 图片URL
          * @param {string} mdAssetDirName - 资源文件夹名
-         * @param {boolean} reset - 是否重置计数器
+         * @param {string} img_prefix - 图片前缀
          * @returns {Promise<string>} 本地图片路径
          */
         async saveWebImageToLocal(imgUrl, mdAssetDirName, img_prefix = "") {
-            if (GM_getValue("mergeArticleContent")) {
-                // 避免多篇文章合并时，异步操作导致索引错乱，所以加锁
-                await this.saveWebImageToLocal_lock.acquire();
-            }
-
             // 检查参数是否合法
             if (typeof imgUrl !== "string") {
                 throw new Error("[saveWebImageToLocal] Invalid argument: imgUrl must be a string.");
@@ -884,11 +952,6 @@
 
             // 记录已保存的图片
             this.imageSet[imgOwner][imgUrl] = `./${filename}`;
-
-            // 释放锁
-            if (GM_getValue("mergeArticleContent")) {
-                this.saveWebImageToLocal_lock.release();
-            }
 
             // 获取图片的Blob对象
             // const blob = await this.fetchImageAsBlob(imgUrl);
@@ -1071,7 +1134,6 @@
                     URL.revokeObjectURL(url);
                     this.clearFileQueue(); // 清空文件队列
                     this.clearImageCache(); // 清空图片缓存
-                    this.saveWebImageToLocal_lock.release(); // 释放锁
                 })
                 .catch((error) => {
                     // 处理错误
@@ -1080,7 +1142,6 @@
                         finalCallback(`下载失败：${zipName}.zip，错误信息：${error}`);
                         throw new Error(`下载失败：${zipName}.zip，错误信息：${error}`);
                     }
-                    this.saveWebImageToLocal_lock.release(); // 释放锁
                     this.clearFileQueue(); // 清空文件队列
                     this.clearImageCache(); // 清空图片缓存
                 });
@@ -1105,10 +1166,8 @@
          * 重置FileManager
          */
         async reset() {
-            await this.saveWebImageToLocal_lock.acquire();
             this.clearFileQueue();
             this.clearImageCache();
-            this.saveWebImageToLocal_lock.release();
         }
     }
 
@@ -1606,12 +1665,22 @@
                                             div.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
                                         });
                                     }
-                                    // 检查是否有style标签存在于svg元素内，如果有则转换为base64形式
-                                    if (node.querySelector("style")) {
-                                        const base64 = Utils.svgToBase64(node.outerHTML);
-                                        result += `![SVG Image](data:image/svg+xml;base64,${base64})${CONSTANT_DOUBLE_NEW_LINE}`;
+                                    if (GM_getValue("saveWebImages")) {
+                                        const svgSavePath = await this.fileManager.saveSvgToLocal(
+                                            node.outerHTML,
+                                            mdAssetDirName,
+                                            img_prefix
+                                        );
+                                        result += `![](${svgSavePath})${CONSTANT_DOUBLE_NEW_LINE}`;
                                     } else {
-                                        result += `<div align="center">${node.outerHTML}</div>${CONSTANT_DOUBLE_NEW_LINE}`;
+                                        // 检查是否有style标签存在于svg元素内，如果有则转换为base64形式
+                                        if (node.querySelector("style")) {
+                                            // 将SVG转换为base64编码
+                                            const base64 = Utils.svgToBase64(node.outerHTML);
+                                            result += `![](data:image/svg+xml;base64,${base64})${CONSTANT_DOUBLE_NEW_LINE}`;
+                                        } else {
+                                            result += `<div align="center">${node.outerHTML}</div>${CONSTANT_DOUBLE_NEW_LINE}`;
+                                        }
                                     }
                                 }
                                 break;
@@ -1897,7 +1966,7 @@
                     ? `${prefix}${articleTitle}`
                     : `${articleTitle}`,
                 !GM_getValue("mergeArticleContent"),
-                GM_getValue("saveAllImagesToAssets") ? prefix : ""
+                GM_getValue("mergeArticleContent") || GM_getValue("saveAllImagesToAssets") ? prefix : ""
             );
 
             if (GM_getValue("addArticleInfoInBlockquote")) {
