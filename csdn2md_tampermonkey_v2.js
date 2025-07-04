@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      2.1.8
+// @version      2.1.9
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -1135,16 +1135,24 @@
          */
         async htmlToMarkdown(articleElement, mdAssetDirName = "", enableTOC = true, img_prefix = "") {
             // 预定义的特殊字段
+            // 内容之间保持两个换行符
             const CONSTANT_DOUBLE_NEW_LINE = "<|CSDN2MD@CONSTANT_DOUBLE_NEW_LINE@23hy7b|>";
+            // 分隔符用于美化，比如公式和文本之间加上空格会更美观
             const SEPARATION_BEAUTIFICATION = "<|CSDN2MD@SEPARATION_BEAUTIFICATION@2caev2|>";
 
             // 处理预定义的特殊字段
             const DDNL = escapeRegExp(CONSTANT_DOUBLE_NEW_LINE);
             const SEPB = escapeRegExp(SEPARATION_BEAUTIFICATION);
 
+            /**
+             * 特殊字符串修剪函数：移除字符串开头和结尾的分隔符(SEPB)和空白字符
+             * @param {string} [text=""] - 需要修剪的字符串 / The string to be trimmed
+             * @returns {string} 修剪后的字符串 / The trimmed string
+             */
             function SpecialTrim(text = "") {
                 return text.replace(new RegExp(`^(?:${SEPB}|\\s)+`), "").replace(new RegExp(`(?:${SEPB}|\\s)+$`), "");
             }
+
             // 1. 连续的 "\n" 与 CONSTANT_DOUBLE_NEW_LINE 替换为 "\n\n"
             const RE_DOUBLE_NL = new RegExp(`(?:\\n|${DDNL})*${DDNL}(?:\\n|${DDNL})*`, "g");
             // 2. 连续的 SEPARATION_BEAUTIFICATION 替换为 " "，但如果前面是换行符，替换为 ""
@@ -1455,7 +1463,7 @@
                                 }
                                 break;
                             case "br":
-                                result += `  \n`;
+                                result += `\n`;
                                 break;
                             case "table":
                                 result += (await processTable(node)) + "\n\n";
