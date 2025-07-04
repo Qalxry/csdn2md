@@ -2427,12 +2427,7 @@
                         // 由于单篇文章无需合并，所以这里需要将mergeArticleContent设置为false
                         const mergeArticleContentSetting = GM_getValue("mergeArticleContent");
                         GM_setValue("mergeArticleContent", false);
-                        await this.parseArticle(
-                            document.body,
-                            GM_getValue("zipCategories"),
-                            window.location.href,
-                            ""
-                        );
+                        await this.parseArticle(document.body, GM_getValue("zipCategories"), window.location.href, "");
                         GM_setValue("mergeArticleContent", mergeArticleContentSetting);
                         this.uiManager.showFloatTip("文章下载完毕！", 4000);
                         break;
@@ -2464,7 +2459,12 @@
             return "category";
         } else if (url.includes("article/details")) {
             return "article";
-        } else if (url.includes("type=blog") || url.includes("type=lately")) {
+        } else if (
+            url.includes("type=blog") ||
+            url.includes("type=lately") ||
+            url.match(/^https:\/\/[^.]+\.blog\.csdn\.net\/$/) ||
+            url.match(/^https:\/\/blog\.csdn\.net\/[^\/]+\/?$/)
+        ) {
             return "user_all_articles";
         } else {
             return "unknown";
