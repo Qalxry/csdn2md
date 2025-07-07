@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      2.1.11
+// @version      2.2.1
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -14,6 +14,7 @@
 // @license      PolyForm Strict License 1.0.0  https://polyformproject.org/licenses/strict/1.0.0/
 // @supportURL   https://github.com/Qalxry/csdn2md
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js
+// @require      https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.min.js
 // ==/UserScript==
 
 (function () {
@@ -1061,7 +1062,7 @@
          * 将文件队列打包为ZIP下载
          * @param {string} zipName - ZIP文件名
          */
-        async saveAllFileToZip(zipName, progressCallback = null, finalCallback = null) {
+        async saveAllFileToZip_old(zipName, progressCallback = null, finalCallback = null) {
             if (this.fileQueue.length === 0) {
                 console.error("没有文件需要保存");
                 return;
@@ -1145,6 +1146,176 @@
                     this.clearFileQueue(); // 清空文件队列
                     this.clearImageCache(); // 清空图片缓存
                 });
+        }
+
+        /**
+         * 使用 fflate 将文件打包成 ZIP，支持进度回调
+         * @param {Array<{name: string, data: Uint8Array|string}>} files - 文件对象数组
+         * @param {function(number, string):void} [onProgress] - 可选的进度回调，接收百分比和文件名
+         * @param {function(string):void} [onFinish] - 可选的完成回调
+         * @param {function(Error):void} [onError] - 可选的错误回调
+         * @return {Promise<Uint8Array>} 返回包含 ZIP 数据的 Promise
+         **/
+        async createZipWithProgress(files, onProgress = null, onError = null) {
+            return new Promise((resolve, reject) => {
+                const encoder = new TextEncoder();
+                const chunks = [];
+                let totalFiles = files.length;
+                let processedFiles = 0;
+
+                const zip = new fflate.Zip((err, chunk, final) => {
+                    if (err) {
+                        // Logger.error("ZIP creation failed:", err);
+                        console.dir(`ZIP creation failed: ${err}`);
+                        if (onError && typeof onError === "function") {
+                            onError(err);
+                        }
+                        return reject(err);
+                    }
+                    if (chunk) chunks.push(chunk);
+                    if (final) {
+                        const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+                        const result = new Uint8Array(totalLength);
+                        let offset = 0;
+                        for (const chunk of chunks) {
+                            result.set(chunk, offset);
+                            offset += chunk.length;
+                        }
+                        resolve(result);
+                    }
+                });
+
+                if (totalFiles === 0) {
+                    zip.end();
+                    return;
+                }
+
+                files.forEach((file, index) => {
+                    const data = typeof file.data === "string" ? encoder.encode(file.data) : file.data;
+                    const fileStream = new fflate.ZipPassThrough(file.name);
+                    zip.add(fileStream);
+                    fileStream.push(data, true);
+                    processedFiles++;
+                    const percentage = Math.round((processedFiles / totalFiles) * 100);
+                    if (onProgress && typeof onProgress === "function") {
+                        try {
+                            onProgress(percentage, file.name);
+                        } catch (e) {
+                            // Logger.error("Progress callback error:", e);
+                            console.dir(`Progress callback error: ${e}`);
+                            if (onError && typeof onError === "function") {
+                                onError(e);
+                            }
+                            return reject(e);
+                        }
+                    }
+                    if (processedFiles === totalFiles) zip.end();
+                });
+            });
+        }
+
+        /**
+         * 将文件队列打包为ZIP下载
+         * @param {string} zipName - ZIP文件名
+         */
+        async saveAllFileToZip(zipName, progressCallback = null, finalCallback = null) {
+            if (this.fileQueue.length === 0) {
+                console.error("没有文件需要保存");
+                return;
+            }
+
+            zipName = Utils.safeFilename(zipName);
+            // 创建JSZip实例
+            const zipFiles = [];
+
+            // 使用 for...of 循环替代 forEach，以便正确处理 async/await
+            for (let idx = 0; idx < this.fileQueue.length; idx++) {
+                let status = true;
+                const file = this.fileQueue[idx];
+                // content 可能是 promise（Blob对象），需要等待
+                if (file.content instanceof Promise) {
+                    if (progressCallback && typeof progressCallback === "function") {
+                        progressCallback(`正在下载资源：${file.filename} (${idx + 1}/${this.fileQueue.length})`);
+                    }
+                    try {
+                        file.content = await file.content; // 等待Blob对象
+                    } catch (err) {
+                        if (progressCallback && typeof progressCallback === "function") {
+                            progressCallback(`下载资源失败：${err}`);
+                        }
+                        status = false;
+                    }
+                }
+                if (!status) {
+                    continue; // 如果下载失败，跳过当前文件
+                }
+                // 将文件添加到ZIP中
+                zipFiles.push({
+                    name: file.filename,
+                    data:
+                        file.content instanceof Blob
+                            ? new Uint8Array(await file.content.arrayBuffer())
+                            : file.content instanceof Uint8Array
+                            ? file.content
+                            : new TextEncoder().encode(file.content),
+                });
+            }
+
+            // 获取当前时间，以便计算剩余时间
+            const startTime = Date.now();
+
+            // 使用 fflate 创建 ZIP 文件
+            const zipContent = await this.createZipWithProgress(
+                zipFiles,
+                (percent, currentFile) => {
+                    // 进度回调
+                    if (progressCallback) {
+                        // percent: 当前进度百分比
+                        // currentFile: 当前正在处理的文件名
+                        progressCallback(
+                            `正在打包：${currentFile} (${percent}%)(剩余时间：${Utils.formatSeconds(
+                                ((Date.now() - startTime) / 1000 / percent) * (100 - percent)
+                            )})`
+                        );
+                    }
+                },
+                async (error) => {
+                    // 先进行降级处理，如果观察稳定，则可以去掉降级逻辑
+                    // 如果发生错误，降级至JSZip
+                    if (progressCallback) {
+                        progressCallback(`下载失败：${zipName}.zip，降级至JSzip。错误信息：${error}`);
+                        await this.saveAllFileToZip_old(zipName, progressCallback, finalCallback);
+                    }
+                    // console.error("Error generating ZIP file:", error);
+                    // if (finalCallback && typeof finalCallback === "function") {
+                    //     finalCallback(`下载失败：${zipName}.zip，错误信息：${error}`);
+                    //     throw new Error(`下载失败：${zipName}.zip，错误信息：${error}`);
+                    // }
+                }
+            );
+
+            const zipBlob = new Blob([zipContent], { type: "application/octet-stream" });
+
+            // 调用最终回调
+            if (finalCallback && typeof finalCallback === "function") {
+                finalCallback(
+                    `打包完成：${zipName}.zip，文件大小：${(zipBlob.size / 1024 / 1024).toFixed(
+                        2
+                    )} MB\n请等待下载完成。`
+                );
+            }
+
+            // 创建下载链接
+            const url = URL.createObjectURL(zipBlob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${zipName}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            this.clearFileQueue(); // 清空文件队列
+            this.clearImageCache(); // 清空图片缓存
         }
 
         /**
