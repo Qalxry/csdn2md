@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      2.1.10
+// @version      2.1.11
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -1937,6 +1937,7 @@
          * @param {string} prefix - 文件前缀
          */
         async parseArticle(doc_body, getZip = false, url = "", prefix = "") {
+            await this.unfoldHideArticleBox(doc_body);
             const articleTitle = doc_body.querySelector("#articleContentId")?.textContent.trim() || "未命名文章";
             const articleInfo =
                 doc_body
@@ -2043,13 +2044,26 @@
                 const onCheckPassed = () => {
                     // 创建一个隐藏的iframe
                     const iframe = document.createElement("iframe");
+                    // // for debugging
+                    // iframe.style.position = "fixed";
+                    // iframe.style.top = "50%";
+                    // iframe.style.left = "50%";
+                    // iframe.style.transform = "translate(-50%, -50%)";
+                    // iframe.style.width = "80vw";
+                    // iframe.style.height = "80vh";
+                    // iframe.style.zIndex = "99999";
+                    // iframe.style.background = "#fff";
+                    // iframe.style.boxShadow = "0 4px 24px rgba(0,0,0,0.18)";
+                    // iframe.style.border = "2px solid #12c2e9";
+                    // iframe.style.borderRadius = "12px";
+                    // iframe.style.opacity = "0.6";
                     iframe.style.display = "none"; // 隐藏iframe
                     document.body.appendChild(iframe);
                     iframe.src = url;
 
                     // 监听iframe加载完成事件
                     iframe.onload = async () => {
-                        console.dir("iframe加载完成，开始下载文章：", url);
+                        console.dir(`iframe加载完成，开始下载文章： Url: ${url}`);
                         try {
                             const doc = iframe.contentDocument || iframe.contentWindow.document;
                             // 调用解析函数
@@ -2060,17 +2074,35 @@
                         } catch (error) {
                             // 在发生错误时移除iframe并拒绝Promise
                             document.body.removeChild(iframe);
-                            console.dir("(downloadArticleInIframe) 解析文章时出错：", error);
-                            error.message += `(downloadArticleInIframe) 解析文章时出错：Url: ${url} OriginalUrl: ${originalUrl} Redirected: ${isRedirected}`;
-                            reject(error);
+                            console.dir(
+                                `(downloadArticleInIframe) 解析文章时出错： Url: ${url} OriginalUrl: ${originalUrl} Redirected: ${isRedirected}. Original error: ${
+                                    error.message || error
+                                }`
+                            );
+                            const newError = new Error(
+                                `(downloadArticleInIframe) 解析文章时出错：Url: ${url} OriginalUrl: ${originalUrl} Redirected: ${isRedirected}. Original error: ${
+                                    error.message || error
+                                }`
+                            );
+                            newError.stack = error.stack;
+                            reject(newError);
                         }
                     };
 
                     // 监听iframe加载错误事件
                     iframe.onerror = (error) => {
                         document.body.removeChild(iframe);
-                        console.dir("(downloadArticleInIframe) Iframe加载失败：", url, error);
-                        error.message += `(downloadArticleInIframe) Iframe加载失败：Url: ${url} OriginalUrl: ${originalUrl} Redirected: ${isRedirected}`;
+                        console.dir(
+                            `(downloadArticleInIframe) Iframe加载失败： Url: ${url} OriginalUrl: ${originalUrl} Redirected: ${isRedirected}. Original error: ${
+                                error.message || error
+                            }`
+                        );
+                        const newError = new Error(
+                            `(downloadArticleInIframe) Iframe加载失败：Url: ${url} OriginalUrl: ${originalUrl} Redirected: ${isRedirected}. Original error: ${
+                                error.message || error
+                            }`
+                        );
+                        newError.stack = error.stack || new Error().stack;
                         reject(error);
                     };
                 };
@@ -2098,13 +2130,22 @@
                             );
                             reject(error);
                         } else {
-                            console.dir("(downloadArticleInIframe) 文章页面加载成功：", url);
+                            console.dir(`(downloadArticleInIframe) 文章页面加载成功：${url}`);
                         }
                         onCheckPassed(); // 检测通过，开始下载
                     },
                     onerror: function (error) {
-                        console.dir(`(downloadArticleInIframe) 无法加载文章页面：`, url, error);
-                        error.message += `(downloadArticleInIframe) 无法加载文章页面：Url: ${url}`;
+                        console.dir(
+                            `(downloadArticleInIframe) 无法加载文章页面： Url: ${url}. Original error: ${
+                                error.message || error
+                            }`
+                        );
+                        const newError = new Error(
+                            `(downloadArticleInIframe) 无法加载文章页面：Url: ${url}. Original error: ${
+                                error.message || error
+                            }`
+                        );
+                        newError.stack = error.stack;
                         reject(error);
                     },
                 });
@@ -2170,6 +2211,82 @@
                 return;
             } else {
                 this.uiManager.showFloatTip(`找到 ${url_list.length} 篇文章。开始解析...`);
+            }
+
+            // FIX: 解决自定义域名在Chrome里下载专栏时，专栏和文章hostname不一致导致跨域问题
+            // https://github.com/Qalxry/csdn2md/issues/7
+            // 专栏的 url 为 https://blog.csdn.net/{user_id}/category_{category_id}.html
+            // 文章的 url 为 https://{custom_domain}.blog.csdn.net/article/details/{article_id}
+            //
+            // > 方案1：将文章的 url 替换为 https://blog.csdn.net/{user_id}/article/details/{article_id}
+            // 会引发 CSDN 的安全策略问题，废弃
+            // if (base_url.startsWith("https://blog.csdn.net/")) {
+            //     const user_id = base_url.match(/blog\.csdn\.net\/([^\/]+)/)[1];
+            //     for (let i = 0; i < url_list.length; i++) {
+            //         if (!url_list[i].startsWith("https://blog.csdn.net/")) {
+            //             const article_id = url_list[i].match(/\/article\/details\/([^\/]+)/)[1];
+            //             url_list[i] = `https://blog.csdn.net/${user_id}/article/details/${article_id}`;
+            //         }
+            //     }
+            // }
+            // > 方案2：将专栏的 url 替换为 https://{custom_domain}.blog.csdn.net/category_{category_id}.html
+            // 虽然有效，但不确定是否稳定，目前来看可以
+            let isAllArticlesCustomDomain = true;
+            let isAllArticlesDefaultDomain = true;
+            for (let i = 0; i < url_list.length; i++) {
+                if (url_list[i].startsWith("https://blog.csdn.net/")) {
+                    isAllArticlesCustomDomain = false;
+                    break;
+                }
+            }
+            for (let i = 0; i < url_list.length; i++) {
+                if (!url_list[i].startsWith("https://blog.csdn.net/")) {
+                    isAllArticlesDefaultDomain = false;
+                    break;
+                }
+            }
+            if (isAllArticlesCustomDomain) {
+                // 如果全部文章都是自定义域名，则将专栏的 url 替换为 https://{custom_domain}.blog.csdn.net/category_{category_id}.html
+                if (base_url.startsWith("https://blog.csdn.net/")) {
+                    console.dir(
+                        `Warning: 文章与专栏的域名不一致，正在将专栏的URL替换为自定义域名。当前专栏URL: ${base_url} 文章URL: ${url_list[0]}`
+                    );
+                    const custom_domain = url_list[0].match(/https:\/\/([^\/]+)\.blog\.csdn\.net/)[1];
+                    GM_setValue("status", {
+                        timestamp: Date.now(),
+                        action: "downloadCategory",
+                        targetUrl: `https://${custom_domain}.blog.csdn.net/category_${category_id}.html`,
+                    });
+                    window.location.href = `https://${custom_domain}.blog.csdn.net/category_${category_id}.html`;
+                }
+            } else if (isAllArticlesDefaultDomain) {
+                // 如果全部文章都是默认域名，则将专栏的 url 替换为 https://blog.csdn.net/category_{category_id}.html
+                if (!base_url.startsWith("https://blog.csdn.net/")) {
+                    console.dir(
+                        `Warning: 文章与专栏的域名不一致，正在将专栏的URL替换为默认域名。当前专栏URL: ${base_url} 文章URL: ${url_list[0]}`
+                    );
+                    const user_id = url_list[0].match(/blog\.csdn\.net\/([^\/]+)/)[1];
+                    GM_setValue("status", {
+                        timestamp: Date.now(),
+                        action: "downloadCategory",
+                        targetUrl: `https://blog.csdn.net/${user_id}/category_${category_id}.html`,
+                    });
+                    window.location.href = `https://blog.csdn.net/${user_id}/category_${category_id}.html`;
+                }
+            } else {
+                // 如果文章的域名不一致，则回退为方案1，至少可能可以下载
+                console.dir(
+                    `Warning: 文章与专栏的域名不一致，可能无法下载。请检查是否有自定义域名。当前专栏URL: ${base_url}`
+                );
+                if (base_url.startsWith("https://blog.csdn.net/")) {
+                    const user_id = base_url.match(/blog\.csdn\.net\/([^\/]+)/)[1];
+                    for (let i = 0; i < url_list.length; i++) {
+                        if (!url_list[i].startsWith("https://blog.csdn.net/")) {
+                            const article_id = url_list[i].match(/\/article\/details\/([^\/]+)/)[1];
+                            url_list[i] = `https://blog.csdn.net/${user_id}/article/details/${article_id}`;
+                        }
+                    }
+                }
             }
 
             // 下载每篇文章
@@ -2291,13 +2408,13 @@
             try {
                 const res = await getUrlListFromAPI();
                 if (res.length === 0) {
-                    console.dir("从API获取文章列表失败，尝试从页面获取文章链接。", error);
+                    console.dir(`从API获取文章列表失败，尝试从页面获取文章链接。`);
                 } else {
                     url_list.push(...res);
                     console.dir(`从API获取到 ${url_list.length} 篇文章链接。`);
                 }
             } catch (error) {
-                console.dir("从API获取文章列表失败，尝试从页面获取文章链接。", error);
+                console.dir(`从API获取文章列表失败，尝试从页面获取文章链接。${error.message || error}`);
             }
 
             // 如果API获取失败，则从页面获取文章链接
@@ -2335,6 +2452,83 @@
                 this.uiManager.showFloatTip("没有找到文章。");
             } else {
                 this.uiManager.showFloatTip(`找到 ${url_list.length} 篇文章。开始解析...`);
+            }
+
+            // FIX: 解决自定义域名在Chrome里下载用户主页时，用户主页和文章hostname不一致导致跨域问题
+            // https://github.com/Qalxry/csdn2md/issues/7
+            // 用户主页的 url 为 https://blog.csdn.net/{user_id} + 可能存在的 ?type=xxx
+            // 文章的 url 为 https://{custom_domain}.blog.csdn.net/article/details/{article_id}
+            //
+            // > 方案1：将文章的 url 替换为 https://blog.csdn.net/{user_id}/article/details/{article_id}
+            // 会引发 CSDN 的安全策略问题，废弃
+            // if (base_url.startsWith("https://blog.csdn.net/")) {
+            //     const user_id = base_url.match(/blog\.csdn\.net\/([^\/]+)/)[1];
+            //     for (let i = 0; i < url_list.length; i++) {
+            //         if (!url_list[i].startsWith("https://blog.csdn.net/")) {
+            //             const article_id = url_list[i].match(/\/article\/details\/([^\/]+)/)[1];
+            //             url_list[i] = `https://blog.csdn.net/${user_id}/article/details/${article_id}`;
+            //         }
+            //     }
+            // }
+            // > 方案2：将用户主页的 url 替换为 https://{custom_domain}.blog.csdn.net + /?type=xxx
+            // 虽然有效，但不确定是否稳定，目前来看可以
+            const base_url = window.location.href;
+            let isAllArticlesCustomDomain = true;
+            let isAllArticlesDefaultDomain = true;
+            for (let i = 0; i < url_list.length; i++) {
+                if (url_list[i].startsWith("https://blog.csdn.net/")) {
+                    isAllArticlesCustomDomain = false;
+                    break;
+                }
+            }
+            for (let i = 0; i < url_list.length; i++) {
+                if (!url_list[i].startsWith("https://blog.csdn.net/")) {
+                    isAllArticlesDefaultDomain = false;
+                    break;
+                }
+            }
+            if (isAllArticlesCustomDomain) {
+                // 如果全部文章都是自定义域名，则将用户主页的 url 替换为 https://{custom_domain}.blog.csdn.net/category_{category_id}.html
+                if (base_url.startsWith("https://blog.csdn.net/")) {
+                    console.dir(
+                        `Warning: 文章与用户主页的域名不一致，正在将用户主页的URL替换为自定义域名。当前用户主页URL: ${base_url} 文章URL: ${url_list[0]}`
+                    );
+                    const custom_domain = url_list[0].match(/https:\/\/([^\/]+)\.blog\.csdn\.net/)[1];
+                    GM_setValue("status", {
+                        timestamp: Date.now(),
+                        action: "downloadUserAllArticles",
+                        targetUrl: `https://${custom_domain}.blog.csdn.net/?type=blog`,
+                    });
+                    window.location.href = `https://${custom_domain}.blog.csdn.net/?type=blog`;
+                }
+            } else if (isAllArticlesDefaultDomain) {
+                // 如果全部文章都是默认域名，则将用户主页的 url 替换为 https://blog.csdn.net/category_{category_id}.html
+                if (!base_url.startsWith("https://blog.csdn.net/")) {
+                    console.dir(
+                        `Warning: 文章与用户主页的域名不一致，正在将用户主页的URL替换为默认域名。当前用户主页URL: ${base_url} 文章URL: ${url_list[0]}`
+                    );
+                    const user_id = url_list[0].match(/blog\.csdn\.net\/([^\/]+)/)[1];
+                    GM_setValue("status", {
+                        timestamp: Date.now(),
+                        action: "downloadUserAllArticles",
+                        targetUrl: `https://blog.csdn.net/${user_id}?type=blog`,
+                    });
+                    window.location.href = `https://blog.csdn.net/${user_id}?type=blog`;
+                }
+            } else {
+                // 如果文章的域名不一致，则回退为方案1，至少可能可以下载
+                console.dir(
+                    `Warning: 文章与用户主页的域名不一致，可能无法下载。请检查是否有自定义域名。当前用户主页URL: ${base_url}`
+                );
+                if (base_url.startsWith("https://blog.csdn.net/")) {
+                    const user_id = base_url.match(/blog\.csdn\.net\/([^\/]+)/)[1];
+                    for (let i = 0; i < url_list.length; i++) {
+                        if (!url_list[i].startsWith("https://blog.csdn.net/")) {
+                            const article_id = url_list[i].match(/\/article\/details\/([^\/]+)/)[1];
+                            url_list[i] = `https://blog.csdn.net/${user_id}/article/details/${article_id}`;
+                        }
+                    }
+                }
             }
 
             // 下载每篇文章
@@ -2480,6 +2674,21 @@
             );
         }
 
+        async unfoldHideArticleBox(document_body) {
+            // 展开隐藏的文章内容
+            const hideArticleBox = document_body.querySelector(".hide-article-box");
+            if (hideArticleBox) {
+                hideArticleBox.querySelectorAll("*").forEach((elem) => {
+                    if (elem.textContent.includes("阅读全文")) {
+                        elem.click();
+                    }
+                });
+                console.dir("已展开隐藏的文章内容。");
+                // 等待 1s
+                await new Promise((resolve) => setTimeout(resolve, 1000));
+            }
+        }
+
         /**
          * 主函数 - 下载文章入口
          */
@@ -2496,6 +2705,7 @@
                         // 由于单篇文章无需合并，所以这里需要将mergeArticleContent设置为false
                         const mergeArticleContentSetting = GM_getValue("mergeArticleContent");
                         GM_setValue("mergeArticleContent", false);
+                        // 避免文章页面加载不完全导致解析失败
                         await this.parseArticle(document.body, GM_getValue("zipCategories"), window.location.href, "");
                         GM_setValue("mergeArticleContent", mergeArticleContentSetting);
                         this.uiManager.showFloatTip("文章下载完毕！", 4000);
@@ -2561,6 +2771,43 @@
 
         // 更新选项状态
         uiManager.updateAllOptions();
+
+        // 检查是否有下载任务
+        const status = GM_getValue("status");
+        if (
+            status &&
+            status.timestamp &&
+            status.action &&
+            status.targetUrl &&
+            Date.now() - status.timestamp < 5 * 60 * 1000 // 检查下载任务是否在5分钟内
+        ) {
+            GM_setValue("status", null); // 清除下载任务状态
+            if (
+                status.action === "downloadCategory" &&
+                Utils.clearUrl(status.targetUrl) === Utils.clearUrl(window.location.href)
+            ) {
+                // 如果有下载任务，直接跳转到下载页面
+                console.dir(`检测到下载任务，开始自动下载专栏文章： ${status.targetUrl}`);
+                uiManager.showFloatTip(`检测到下载任务，开始自动下载专栏文章： ${status.targetUrl}`);
+                uiManager.downloadButton.click();
+            } else if (
+                status.action === "downloadUserAllArticles" &&
+                Utils.clearUrl(status.targetUrl) === Utils.clearUrl(window.location.href)
+            ) {
+                // 如果有下载任务，直接跳转到下载页面
+                console.dir(`检测到下载任务，开始自动下载用户全部文章： ${status.targetUrl}`);
+                uiManager.showFloatTip(`检测到下载任务，开始自动下载用户全部文章： ${status.targetUrl}`);
+                uiManager.downloadButton.click();
+            } else {
+                console.dir(
+                    `检测到下载任务，但当前页面与任务目标页面不一致，跳过自动下载。当前页面：${window.location.href} 任务目标页面：${status.targetUrl}`
+                );
+                uiManager.showFloatTip(
+                    `检测到下载任务，但当前页面与任务目标页面不一致，跳过自动下载。当前页面：${window.location.href} 任务目标页面：${status.targetUrl}`,
+                    5000
+                );
+            }
+        }
     }
 
     // 启动应用
