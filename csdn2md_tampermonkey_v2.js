@@ -408,7 +408,7 @@
             // 创建下载按钮
             this.downloadButton = document.createElement("button");
             this.downloadButton.innerHTML =
-                "下载CSDN文章为Markdown<br>（支持专栏、文章、用户全部文章页面）<br>（推荐使用typora打开下载的Markdown）";
+                "点击下载Markdown<br>（支持文章、专栏、用户全部文章页面）<br>（推荐使用typora打开下载的Markdown）";
             this.downloadButton.id = "myDownloadButton";
             this.floatWindow.appendChild(this.downloadButton);
 
@@ -421,37 +421,38 @@
             this.floatWindow.appendChild(optionContainer);
 
             // 添加选项
-            this.addOption("parallelDownload", "批量并行下载模式", true, optionContainer);
+            this.addOption("parallelDownload", "批量并行下载模式（使用iframe，更能够保证完整性）", true, optionContainer);
             this.addOption(
                 "fastDownload",
-                "批量高速下载模式（有代码块语言无法识别等问题，能接受就开）",
+                "批量高速下载模式（改用fetch，请注意可能有代码块语言无法识别等问题）",
                 false,
                 optionContainer
             );
-            this.addOption("addSerialNumber", "批量文章文件加入序号前缀", true, optionContainer);
+            this.addOption("addSerialNumber", "批量下载时文件名加入\"No_\"格式的序号前缀", true, optionContainer);
             this.addOption("zipCategories", "下载为压缩包", true, optionContainer, {
                 false: [{ id: "saveWebImages", value: false }],
             });
-            this.addOption("addArticleInfoInYaml", "添加文章元信息（以YAML元信息格式）", false, optionContainer);
+            this.addOption("addArticleInfoInYaml", "添加文章元信息（YAML格式，对于转Hexo博客比较有用）", false, optionContainer);
             this.addOption("addArticleTitleToMarkdown", "添加文章标题（以一级标题形式）", true, optionContainer);
             this.addOption(
                 "addArticleInfoInBlockquote",
-                "添加阅读量、点赞等信息（以引用块形式）",
+                "添加文章阅读量、点赞等信息（以引用块形式）",
                 true,
                 optionContainer
             );
             this.addOption(
                 "saveWebImages",
-                "将图片保存至本地（默认保存到与md文件同名的文件夹，以相对路径使用）",
+                "将图片保存至本地",
                 true,
                 optionContainer,
                 {
                     true: [{ id: "zipCategories", value: true }],
+                    false: [{ id: "saveAllImagesToAssets", value: false }],
                 }
             );
             this.addOption(
                 "saveAllImagesToAssets",
-                "将图片保存统一保存到assets文件夹内，以相对路径使用",
+                "图片保存位置：assets文件夹（如不启用，则保存到MD文件同名文件夹）",
                 true,
                 optionContainer,
                 {
@@ -461,11 +462,11 @@
                     ],
                 }
             );
-            this.addOption("forceImageCentering", "全部图片居中排版", false, optionContainer);
-            this.addOption("enableImageSize", "启用图片宽高属性（如果网页中的图片具有宽高）", true, optionContainer);
+            this.addOption("forceImageCentering", "全部图片居中（全部使用![]()格式，不使用\<img\>格式）", false, optionContainer);
+            this.addOption("enableImageSize", "启用图片宽高属性（如果网页提供宽高）", true, optionContainer);
             this.addOption("removeCSDNSearchLink", "移除CSDN搜索链接", true, optionContainer);
-            this.addOption("enableColorText", "启用彩色文字（以span形式保存）", true, optionContainer);
-            this.addOption("mergeArticleContent", "合并批量文章内容（以一篇文章的形式保存）", false, optionContainer, {
+            this.addOption("enableColorText", "启用彩色文字（使用\<span\>格式）", true, optionContainer);
+            this.addOption("mergeArticleContent", "合并批量文章内容（保存为单个MD文件）", false, optionContainer, {
                 true: [
                     { id: "zipCategories", value: true },
                     { id: "addArticleInfoInYaml", value: false },
@@ -473,13 +474,13 @@
             });
             this.addOption(
                 "addSerialNumberToTitle",
-                "添加序号到标题前缀（建议在合并文章时开启）",
+                "添加序号到标题前缀（在合并文章时可能有用）",
                 false,
                 optionContainer
             );
             this.addOption(
                 "addArticleInfoInBlockquote_batch",
-                "合并文章时添加阅读量、点赞等信息（以引用块形式）",
+                "合并文章时添加该栏目总阅读量、点赞等信息（以引用块形式）",
                 true,
                 optionContainer
             );
@@ -806,6 +807,7 @@
             dialog.appendChild(btnBox);
             overlay.appendChild(dialog);
             document.body.appendChild(overlay);
+            okBtn.click(); // 自动触发点击事件，模拟用户点击
         }
 
         /**
