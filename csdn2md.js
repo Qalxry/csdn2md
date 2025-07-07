@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      2.2.3
+// @version      2.2.4
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -421,18 +421,28 @@
             this.floatWindow.appendChild(optionContainer);
 
             // 添加选项
-            this.addOption("parallelDownload", "批量并行下载模式（使用iframe，更能够保证完整性）", true, optionContainer);
+            this.addOption(
+                "parallelDownload",
+                "批量并行下载模式（使用iframe，更能够保证完整性）",
+                true,
+                optionContainer
+            );
             this.addOption(
                 "fastDownload",
                 "批量高速下载模式（改用fetch，请注意可能有代码块语言无法识别等问题）",
                 false,
                 optionContainer
             );
-            this.addOption("addSerialNumber", "批量下载时文件名加入\"No_\"格式的序号前缀", true, optionContainer);
+            this.addOption("addSerialNumber", '批量下载时文件名加入"No_"格式的序号前缀', true, optionContainer);
             this.addOption("zipCategories", "下载为压缩包", true, optionContainer, {
                 false: [{ id: "saveWebImages", value: false }],
             });
-            this.addOption("addArticleInfoInYaml", "添加文章元信息（YAML格式，对于转Hexo博客比较有用）", false, optionContainer);
+            this.addOption(
+                "addArticleInfoInYaml",
+                "添加文章元信息（YAML格式，对于转Hexo博客比较有用）",
+                false,
+                optionContainer
+            );
             this.addOption("addArticleTitleToMarkdown", "添加文章标题（以一级标题形式）", true, optionContainer);
             this.addOption(
                 "addArticleInfoInBlockquote",
@@ -440,16 +450,10 @@
                 true,
                 optionContainer
             );
-            this.addOption(
-                "saveWebImages",
-                "将图片保存至本地",
-                true,
-                optionContainer,
-                {
-                    true: [{ id: "zipCategories", value: true }],
-                    false: [{ id: "saveAllImagesToAssets", value: false }],
-                }
-            );
+            this.addOption("saveWebImages", "将图片保存至本地", true, optionContainer, {
+                true: [{ id: "zipCategories", value: true }],
+                false: [{ id: "saveAllImagesToAssets", value: false }],
+            });
             this.addOption(
                 "saveAllImagesToAssets",
                 "图片保存位置：assets文件夹（如不启用，则保存到MD文件同名文件夹）",
@@ -465,7 +469,7 @@
             this.addOption("forceImageCentering", "全部图片居中", false, optionContainer);
             this.addOption("enableImageSize", "启用图片宽高属性（如果网页提供宽高）", true, optionContainer);
             this.addOption("removeCSDNSearchLink", "移除CSDN搜索链接", true, optionContainer);
-            this.addOption("enableColorText", "启用彩色文字（使用\<span\>格式）", true, optionContainer);
+            this.addOption("enableColorText", "启用彩色文字（使用<span>格式）", true, optionContainer);
             this.addOption("mergeArticleContent", "合并批量文章内容（保存为单个MD文件）", false, optionContainer, {
                 true: [
                     { id: "zipCategories", value: true },
@@ -807,7 +811,6 @@
             dialog.appendChild(btnBox);
             overlay.appendChild(dialog);
             document.body.appendChild(overlay);
-            okBtn.click(); // 自动触发点击事件，模拟用户点击
         }
 
         /**
@@ -2302,6 +2305,7 @@
                                 `(downloadArticleInIframe) 文章页面状态码异常：Url: ${url} Response Status: ${response.status}`
                             );
                             reject(error);
+                            return;
                         } else {
                             console.dir(`(downloadArticleInIframe) 文章页面加载成功：${url}`);
                         }
@@ -2851,14 +2855,18 @@
             // 展开隐藏的文章内容
             const hideArticleBox = document_body.querySelector(".hide-article-box");
             if (hideArticleBox) {
+                let isHidden = false;
                 hideArticleBox.querySelectorAll("*").forEach((elem) => {
                     if (elem.textContent.includes("阅读全文")) {
                         elem.click();
+                        isHidden = true;
                     }
                 });
-                console.dir("已展开隐藏的文章内容。");
                 // 等待 1s
-                await new Promise((resolve) => setTimeout(resolve, 1000));
+                if (isHidden) {
+                    console.dir("已展开隐藏的文章内容。");
+                    await new Promise((resolve) => setTimeout(resolve, 1000));
+                }
             }
         }
 
