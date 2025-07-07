@@ -462,7 +462,7 @@
                     ],
                 }
             );
-            this.addOption("forceImageCentering", "全部图片居中（全部使用![]()格式，不使用\<img\>格式）", false, optionContainer);
+            this.addOption("forceImageCentering", "全部图片居中", false, optionContainer);
             this.addOption("enableImageSize", "启用图片宽高属性（如果网页提供宽高）", true, optionContainer);
             this.addOption("removeCSDNSearchLink", "移除CSDN搜索链接", true, optionContainer);
             this.addOption("enableColorText", "启用彩色文字（使用\<span\>格式）", true, optionContainer);
