@@ -2394,34 +2394,36 @@
          * 处理加粗元素
          */
         async handleStrong(node, context) {
-            const content = await this.processChildren(node, context);
-            return `${this.SEPARATION_BEAUTIFICATION}**${this.specialTrim(content)}**${this.SEPARATION_BEAUTIFICATION}`;
+            const content = this.specialTrim(await this.processChildren(node, context));
+            if (content === "") return "";
+            return `${this.SEPARATION_BEAUTIFICATION}**${content}**${this.SEPARATION_BEAUTIFICATION}`;
         }
 
         /**
          * 处理斜体元素
          */
         async handleEmphasis(node, context) {
-            const content = await this.processChildren(node, context);
-            return `${this.SEPARATION_BEAUTIFICATION}*${this.specialTrim(content)}*${this.SEPARATION_BEAUTIFICATION}`;
+            const content = this.specialTrim(await this.processChildren(node, context));
+            if (content === "") return "";
+            return `${this.SEPARATION_BEAUTIFICATION}*${content}*${this.SEPARATION_BEAUTIFICATION}`;
         }
 
         /**
          * 处理下划线元素
          */
         async handleUnderline(node, context) {
-            const content = await this.processChildren(node, context);
-            return `${this.SEPARATION_BEAUTIFICATION}<u>${this.specialTrim(content)}</u>${
-                this.SEPARATION_BEAUTIFICATION
-            }`;
+            const content = this.specialTrim(await this.processChildren(node, context));
+            if (content === "") return "";
+            return `${this.SEPARATION_BEAUTIFICATION}<u>${content}</u>${this.SEPARATION_BEAUTIFICATION}`;
         }
 
         /**
          * 处理删除线元素
          */
         async handleStrikethrough(node, context) {
-            const content = await this.processChildren(node, context);
-            return `${this.SEPARATION_BEAUTIFICATION}~~${this.specialTrim(content)}~~${this.SEPARATION_BEAUTIFICATION}`;
+            const content = this.specialTrim(await this.processChildren(node, context));
+            if (content === "") return "";
+            return `${this.SEPARATION_BEAUTIFICATION}~~${content}~~${this.SEPARATION_BEAUTIFICATION}`;
         }
 
         /**
@@ -2441,11 +2443,20 @@
                 return `[${desc}](${href}) `;
             }
 
-            const text = await this.processChildren(node, context);
+            let text = await this.processChildren(node, context);
             // 处理CSDN搜索链接
             if (href.includes("https://so.csdn.net/so/search") && context.removeCSDNSearchLink) {
                 return text;
             }
+
+            // 适配旧版CSDN的 "OLE_LINK{xxx}" 链接
+            const name = node.getAttribute("name") || "";
+            if (name.startsWith("OLE_LINK")) {
+                text = text.replace("\n", "");
+            }
+
+            // 如果链接和文本都为空，则返回空字符串
+            if (text === "" && href === "") return "";
             return `${this.SEPARATION_BEAUTIFICATION}[${text}](${href})${this.SEPARATION_BEAUTIFICATION}`;
         }
 
@@ -2716,7 +2727,9 @@
             // 处理带颜色的文本
             const style = node.getAttribute("style") || "";
             if ((style.includes("background-color") || style.includes("color")) && context.enableColorText) {
-                return `<span style="${style}">${await this.processChildren(node, context)}</span>`;
+                if (node.childNodes.length === 1 && node.childNodes[0].nodeType === this.TEXT_NODE) {
+                    return `<span style="${style}">${await this.processChildren(node, context)}</span>`;
+                }
             }
 
             return await this.processChildren(node, context);
