@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         csdn2md - 批量下载CSDN文章为Markdown
+// @name         (dev) csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      2.3.1
+// @version      3.0.0
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -223,10 +223,9 @@
             }
         }
     }
-
     /**
      * 模块: UI管理
-     * 处理界面相关的功能
+     * 处理界面相关的功能，支持多种输入类型和分组
      */
     class UIManager {
         constructor(fileManager, downloadManager) {
@@ -241,11 +240,13 @@
             this.floatWindow = null;
             this.downloadButton = null;
             this.gotoRepoButton = null;
-            this.defaultOptions = {};
-            this.optionDivList = [];
-            this.optionCheckBoxList = [];
             this.isOpen = false;
             this.repo_url = "https://github.com/Qalxry/csdn2md";
+
+            // 配置管理
+            this.configManager = new ConfigManager();
+
+            // 初始化
             this.initStyles();
             this.initUI();
             this.setupEventListeners();
@@ -258,104 +259,408 @@
          */
         initStyles() {
             GM_addStyle(`
-                .tm_floating-container {
-                    position: fixed;
-                    bottom: 30px;
-                    right: 30px;
-                    z-index: 9999;
-                    transform-origin: bottom right;
-                }
+            :root {
+                --tm_ui-linear-gradient: linear-gradient(135deg, #12c2e9 0%, #c471ed 50%, #f64f59 100%);
+            }
 
-                .tm_main-button {
-                    width: 60px;
-                    height: 60px;
-                    border-radius: 50%;
-                    background: linear-gradient(135deg, #12c2e9 0%, #c471ed 50%, #f64f59 100%);
-                    box-shadow: 0 0 20px rgba(0,0,0,0.2);
-                    border: none;
-                    color: white;
-                    font-size: 30px;
-                    cursor: pointer;
-                    transition: all 0.3s ease;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                }
+            .tm_floating-container {
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                z-index: 9999;
+                transform-origin: bottom right;
+                font-size: 13px;
+            }
 
-                .tm_content-box {
-                    background: linear-gradient(45deg, #ffffff, #f8f9fa);
-                    border-radius: 20px;
-                    padding: 20px;
-                    min-width: 480px !important;
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-                    margin-bottom: 20px;
-                    opacity: 0;
-                    transform: scale(0);
-                    transform-origin: bottom right;
-                    transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-                    position: absolute;
-                    bottom: 100%;
-                    right: 0;
-                }
+            .tm_main-button {
+                width: 50px;
+                height: 50px;
+                border-radius: 50%;
+                background: var(--tm_ui-linear-gradient);
+                box-shadow: 0 0 20px rgba(0,0,0,0.2);
+                border: none;
+                color: white;
+                font-size: 20px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
 
-                .tm_content-box.open {
-                    opacity: 1;
-                    transform: scale(1);
-                }
+            .tm_content-box {
+                background: linear-gradient(45deg, #ffffff, #f8f9fa);
+                border-radius: 13px;
+                padding: 13px;
+                width: 360px;
+                box-shadow: 0 7px 20px rgba(0,0,0,0.15);
+                margin-bottom: 13px;
+                opacity: 0;
+                transform: scale(0);
+                transform-origin: bottom right;
+                transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+                position: absolute;
+                bottom: 100%;
+                right: 0;
+            }
 
-                .tm_complex-content {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 15px;
-                }
+            .tm_content-box.open {
+                opacity: 1;
+                transform: scale(1);
+            }
 
-                .tm_content-item {
-                    padding: 15px;
-                    background: rgba(255,255,255,0.9);
-                    border-radius: 10px;
-                    border: 1px solid rgba(0,0,0,0.1);
-                    transition: transform 0.2s ease;
-                }
+            .tm_complex-content {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
 
-                .tm_content-item:hover {
-                    transform: scale(1.1);
-                }
+            #myFloatWindow {
+                width: 100%;
+                position: relative;
+            }
 
-                #myFloatWindow label {
-                    white-space: nowrap;  /* 防止文字换行 */
-                    user-select: none;    /* 优化用户体验 */
-                }
+            .tm_ui-options-container {
+                max-height: 400px;
+                overflow-y: auto;
+                padding-right: 5px;
+                margin: 10px 0;
+                scrollbar-width: thin;
+                scrollbar-color: rgba(0,0,0,0.3) transparent;
+                position: relative;
+            }
 
-                #myDownloadButton, #myGotoRepoButton, #myResetButton {
-                    text-align: center;
-                    padding: 5px 10px;
-                    background: linear-gradient(135deg, #12c2e9 0%, #c471ed 50%, #f64f59 100%);
-                    color: white;
-                    cursor: pointer;
-                    transition: all 0.3s ease;
-                    border-radius: 5px;
-                    border: none;
-                }
+            .tm_ui-options-disabled-overlay {
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(240,240,240,0.7);
+                z-index: 10;
+                display: none;
+                border-radius: 8px;
+            }
 
-                #myDownloadButton {
-                    margin-bottom: 5px;
-                }
+            .tm_ui-options-container::-webkit-scrollbar {
+                width: 4px;
+            }
 
-                #myGotoRepoButton, #myResetButton {
-                    margin-top: 12px;
-                }
+            .tm_ui-options-container::-webkit-scrollbar-thumb {
+                background-color: rgba(0,0,0,0.3);
+                border-radius: 2px;
+            }
 
-                #myDownloadButton:hover, #myGotoRepoButton:hover, #myResetButton:hover {
-                    transform: scale(1.1);
-                }
+            .tm_ui-option-group {
+                border: 1px solid rgba(0,0,0,0.08);
+                border-radius: 6px;
+                padding: 0;
+                margin-bottom: 7px;
+                background: #ffffff;
+                box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+                overflow: hidden;
+                transition: all 0.3s ease;
+            }
 
-                #myDownloadButton:disabled, #myGotoRepoButton:disabled, #myResetButton:disabled {
-                    background: gray;
-                    color: #aaa;
-                    cursor: not-allowed;
-                    transform: none;
-                }
-            `);
+            .tm_ui-option-group-header {
+                padding: 7px 8px;
+                cursor: pointer;
+                background: rgba(0,0,0,0.02);
+                border-bottom: 1px solid rgba(0,0,0,0.08);
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                user-select: none;
+                transition: background 0.2s ease;
+            }
+            .tm_ui-option-group-header:hover {
+                background: rgba(0, 123, 255, 0.05);
+            }
+
+            .tm_ui-option-group-title {
+                font-weight: 800;
+                color: #444;
+                flex: 1;
+                font-size: 12px;
+            }
+
+            .tm_ui-option-group-content {
+                padding: 8px;
+                overflow: hidden;
+                max-height: 0px; /* 设置足够大的展开高度 */
+                transition: max-height 0.3s cubic-bezier(0.33, 1, 0.68, 1), padding 0.3s ease, opacity 0.3s ease;
+                opacity: 1;
+            }
+
+            .tm_ui-option-group-collapsed .tm_ui-option-group-content {
+                max-height: 0px;
+                padding-top: 0;
+                padding-bottom: 0;
+                opacity: 0;
+            }
+
+            .tm_ui-option-item {
+                margin-bottom: 8px;
+                display: flex;
+                align-items: center;
+                flex-wrap: wrap;
+            }
+
+            .tm_ui-option-item:last-child {
+                margin-bottom: 0;
+            }
+
+            .tm_ui-option-label {
+                margin-left: 5px;
+                flex: 1;
+                min-width: 80px;
+                font-size: 12px;
+            }
+
+            .tm_ui-input-container {
+                display: flex;
+                align-items: center;
+                flex: 1;
+                max-width: 120px;
+            }
+
+            .tm_ui-tooltip {
+                position: relative;
+                display: inline-flex;
+                margin-left: 6px;
+                cursor: help;
+            }
+
+            .tm_ui-tooltip-icon {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                background-color: rgba(0,0,0,0.2);
+                color: white;
+                font-size: 9px;
+                font-weight: bold;
+            }
+
+            .tm_ui-tooltip-text {
+                visibility: hidden;
+                background-color: rgba(0,0,0,0.7);
+                color: #fff;
+                text-align: left;
+                border-radius: 4px;
+                padding: 5px 7px;
+                position: absolute;
+                z-index: 10000;
+                font-size: 11px;
+                opacity: 0;
+                transition: opacity 0.3s;
+                line-height: 1.4;
+                pointer-events: none;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+                top: -5px;
+                right: 110%;
+                white-space: nowrap;
+                overflow-wrap: break-word;
+            }
+
+            .tm_ui-tooltip:hover .tm_ui-tooltip-text {
+                visibility: visible;
+                opacity: 1;
+            }
+
+            .tm_ui-switch {
+                --tm_ui-width: 28px;
+                --tm_ui-height: 14px;
+                --tm_ui-padding: 2px;
+                --tm_ui-duration: 0.2s;
+                --tm_ui-color-on:rgb(76, 97, 175);
+                --tm_ui-color-off: #e0e0e0;
+                --tm_ui-color-knob: #ffffff;
+                --tm_ui-shadow: 0 2px 5px rgba(0,0,0,0.2);
+                --tm_ui-knob-size: calc(var(--tm_ui-height) - var(--tm_ui-padding) * 2);
+                display: inline-block;
+                position: relative;
+                width: var(--tm_ui-width);
+                height: var(--tm_ui-height);
+            }
+            .tm_ui-switch input {
+                opacity: 0;
+                width: 0;
+                height: 0;
+            }
+            .tm_ui-switch-slider {
+                position: absolute;
+                cursor: pointer;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background-color: var(--tm_ui-color-off);
+                transition: background-color var(--tm_ui-duration) ease;
+                border-radius: var(--tm_ui-height);
+                box-shadow: var(--tm_ui-shadow) inset;
+            }
+            .tm_ui-switch-slider:before {
+                position: absolute;
+                content: "";
+                height: var(--tm_ui-knob-size);
+                width: var(--tm_ui-knob-size);
+                left: var(--tm_ui-padding);
+                bottom: var(--tm_ui-padding);
+                background-color: var(--tm_ui-color-knob);
+                transition: transform var(--tm_ui-duration) ease;
+                border-radius: 50%;
+                box-shadow: var(--tm_ui-shadow);
+            }
+            .tm_ui-switch input:checked + .tm_ui-switch-slider {
+                background-color: var(--tm_ui-color-on);
+            }
+            .tm_ui-switch input:checked + .tm_ui-switch-slider:before {
+                transform: translateX(calc(var(--tm_ui-width) - var(--tm_ui-height)));
+            }
+            .tm_ui-switch input:disabled + .tm_ui-switch-slider {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
+
+            .tm_ui-range-container {
+                display: flex;
+                align-items: center;
+                width: 100%;
+                max-width: 120px;
+                gap: 5px;
+            }
+
+            .tm_ui-range-input {
+                flex: 1;
+                width: 90px;
+            }
+
+            .tm_ui-range-value {
+                width: 25px;
+                text-align: center;
+                border: 1px solid #ccc;
+                border-radius: 2px;
+                padding: 1px;
+                font-size: 10px;
+            }
+
+            .tm_ui-select {
+                padding: 3px;
+                border-radius: 3px;
+                border: 1px solid #ccc;
+                background-color: white;
+                width: 100%;
+                font-size: 11px;
+            }
+
+            .tm_ui-input-number, .tm_ui-input-text {
+                padding: 3px;
+                border-radius: 3px;
+                border: 1px solid #ccc;
+                width: 100%;
+                font-size: 11px;
+            }
+
+            .tm_ui-buttons-container {
+                display: flex;
+                gap: 7px;
+                justify-content: center;
+                margin-top: 3px;
+            }
+
+            #myDownloadButton, #myResetButton {
+                text-align: center;
+                padding: 5px 8px;
+                background: var(--tm_ui-linear-gradient);
+                color: white;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                border-radius: 3px;
+                border: none;
+                font-size: 11px;
+            }
+
+            #myDownloadButton {
+                width: 100%;
+                margin-bottom: 3px;
+                padding: 8px;
+            }
+
+            #myResetButton {
+                flex: 1;
+            }
+
+            #myGotoRepoButton {
+                flex: 3;
+            }
+
+            .collapse-icon {
+                width: 12px;
+                height: 12px;
+                transition: transform 0.3s ease;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .tm_ui-option-group-collapsed .collapse-icon {
+                transform: rotate(180deg);
+            }
+
+            #myDownloadButton:hover, #myResetButton:hover {
+                transform: scale(1.05);
+                box-shadow: 0 1px 5px rgba(0,0,0,0.15);
+            }
+
+            #myDownloadButton:disabled, #myResetButton:disabled {
+                background: gray;
+                color: #aaa;
+                cursor: not-allowed;
+                transform: none;
+                box-shadow: none;
+            }
+
+            #myGotoRepoButton {
+                background: #000000;
+                color: #ffffff;
+                text-align: center;
+                padding: 5px 8px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                border-radius: 3px;
+                border: none;
+                font-size: 11px;
+            }
+            #myGotoRepoButton:hover {
+                scale: 1.05;
+            }
+            #myGotoRepoButton:active {
+                scale: 1;
+            }
+            #myGotoRepoButton:hover .goto-repo-btn-icon {
+                fill: #ffff00;
+                scale: 1.05;
+                rotate: 360deg;
+                filter: drop-shadow(0 0 5px rgba(255, 208, 0, 0.8))
+                        drop-shadow(0 0 10px rgba(255, 208, 0, 0.6));
+            }
+            #myGotoRepoButton:hover .goto-repo-btn-text {
+                filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.2))
+                        drop-shadow(0 0 10px rgba(255, 255, 255, 0.4));
+            }
+            #myGotoRepoButton .goto-repo-btn-text {
+                transition: all 1s ease;
+            }
+            #myGotoRepoButton .goto-repo-btn-icon {
+                display: inline-block;
+                width: 12px;
+                height: 12px;
+                transition: all 1s ease;
+            }
+        `);
         }
 
         /**
@@ -370,7 +675,7 @@
             // 创建主按钮
             this.mainButton = document.createElement("button");
             this.mainButton.className = "tm_main-button";
-            this.mainButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px" fill="#FFFFFF"><path d="M480-337q-8 0-15-2.5t-13-8.5L308-492q-12-12-11.5-28t11.5-28q12-12 28.5-12.5T365-549l75 75v-286q0-17 11.5-28.5T480-800q17 0 28.5 11.5T520-760v286l75-75q12-12 28.5-11.5T652-548q11 12 11.5 28T652-492L508-348q-6 6-13 8.5t-15 2.5ZM240-160q-33 0-56.5-23.5T160-240v-80q0-17 11.5-28.5T200-360q17 0 28.5 11.5T240-320v80h480v-80q0-17 11.5-28.5T760-360q17 0 28.5 11.5T800-320v80q0 33-23.5 56.5T720-160H240Z"/></svg>`;
+            this.mainButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" height="20px" viewBox="0 -960 960 960" width="20px" fill="#FFFFFF"><path d="M480-337q-8 0-15-2.5t-13-8.5L308-492q-12-12-11.5-28t11.5-28q12-12 28.5-12.5T365-549l75 75v-286q0-17 11.5-28.5T480-800q17 0 28.5 11.5T520-760v286l75-75q12-12 28.5-11.5T652-548q11 12 11.5 28T652-492L508-348q-6 6-13 8.5t-15 2.5ZM240-160q-33 0-56.5-23.5T160-240v-80q0-17 11.5-28.5T200-360q17 0 28.5 11.5T240-320v80h480v-80q0-17 11.5-28.5T760-360q17 0 28.5 11.5T800-320v80q0 33-23.5 56.5T720-160H240Z"/></svg>`;
 
             // 创建内容区域
             this.contentBox = document.createElement("div");
@@ -378,8 +683,8 @@
 
             // 创建复杂内容
             this.contentBox.innerHTML = `
-                <div class="tm_complex-content" id="tmComplexContent"></div>
-            `;
+            <div class="tm_complex-content" id="tmComplexContent"></div>
+        `;
 
             // 组装元素
             this.container.appendChild(this.contentBox);
@@ -389,7 +694,7 @@
             // 还原之前保存的位置
             const savedTop = GM_getValue("draggableTop");
             if (savedTop) {
-                this.container.style.top = Math.min(window.innerHeight - 100, parseInt(savedTop)) + "px";
+                this.container.style.top = Math.min(window.innerHeight - 50, parseInt(savedTop)) + "px";
             }
 
             // 创建浮动窗口
@@ -402,109 +707,631 @@
         createFloatWindow() {
             // 创建悬浮窗
             this.floatWindow = document.createElement("div");
-            this.floatWindow.style.alignItems = "center";
             this.floatWindow.style.display = "flex";
-            this.floatWindow.style.flexDirection = "column"; // 里面的元素每个占一行
+            this.floatWindow.style.flexDirection = "column";
             this.floatWindow.id = "myFloatWindow";
 
             // 创建下载按钮
             this.downloadButton = document.createElement("button");
-            this.downloadButton.innerHTML =
-                "点击下载Markdown<br>（支持文章、专栏、用户全部文章页面）<br>（推荐使用typora打开下载的Markdown）";
+            this.downloadButton.innerHTML = "点击下载Markdown<br>（支持文章、专栏、用户全部文章页面）";
             this.downloadButton.id = "myDownloadButton";
             this.floatWindow.appendChild(this.downloadButton);
 
-            // 创建选项容器
+            // 创建选项容器，设置为可滚动
             const optionContainer = document.createElement("div");
-            optionContainer.style.display = "flex";
-            optionContainer.style.flexDirection = "column";
-            optionContainer.style.alignItems = "left";
-            optionContainer.style.marginTop = "10px";
+            optionContainer.className = "tm_ui-options-container";
             this.floatWindow.appendChild(optionContainer);
 
-            // 添加选项
-            this.addOption(
-                "parallelDownload",
-                "批量并行下载模式（使用iframe，更能够保证完整性）",
-                true,
-                optionContainer
-            );
-            this.addOption(
-                "fastDownload",
-                "批量高速下载模式（改用fetch，请注意可能有代码块语言无法识别等问题）",
-                false,
-                optionContainer
-            );
-            this.addOption("addSerialNumber", '批量下载时文件名加入"No_"格式的序号前缀', true, optionContainer);
-            this.addOption("zipCategories", "下载为压缩包", true, optionContainer, {
-                false: [{ id: "saveWebImages", value: false }, { id: "saveAllImagesToAssets", value: false }],
-            });
-            this.addOption(
-                "addArticleInfoInYaml",
-                "添加文章元信息（YAML格式，对于转Hexo博客比较有用）",
-                false,
-                optionContainer
-            );
-            this.addOption("addArticleTitleToMarkdown", "添加文章标题（以一级标题形式）", true, optionContainer);
-            this.addOption(
-                "addArticleInfoInBlockquote",
-                "添加文章阅读量、点赞等信息（以引用块形式）",
-                true,
-                optionContainer
-            );
-            this.addOption("saveWebImages", "将图片保存至本地", true, optionContainer, {
-                true: [{ id: "zipCategories", value: true }],
-                false: [{ id: "saveAllImagesToAssets", value: false }],
-            });
-            this.addOption(
-                "saveAllImagesToAssets",
-                "图片保存位置：assets文件夹（如不启用，则保存到MD文件同名文件夹）",
-                true,
-                optionContainer,
-                {
-                    true: [
-                        { id: "zipCategories", value: true },
-                        { id: "saveWebImages", value: true },
-                    ],
-                }
-            );
-            this.addOption("forceImageCentering", "全部图片居中", false, optionContainer);
-            this.addOption("enableImageSize", "启用图片宽高属性（如果网页提供宽高）", true, optionContainer);
-            this.addOption("removeCSDNSearchLink", "移除CSDN搜索链接", true, optionContainer);
-            this.addOption("enableColorText", "启用彩色文字（使用<span>格式）", true, optionContainer);
-            this.addOption("mergeArticleContent", "合并批量文章内容（保存为单个MD文件）", false, optionContainer, {
-                true: [
-                    { id: "zipCategories", value: true },
-                    { id: "addArticleInfoInYaml", value: false },
-                ],
-            });
-            this.addOption(
-                "addSerialNumberToTitle",
-                "添加序号到标题前缀（在合并文章时可能有用）",
-                false,
-                optionContainer
-            );
-            this.addOption(
-                "addArticleInfoInBlockquote_batch",
-                "合并文章时添加该栏目总阅读量、点赞等信息（以引用块形式）",
-                true,
-                optionContainer
-            );
+            // 创建选项容器禁用遮罩
+            const overlay = document.createElement("div");
+            overlay.className = "tm_ui-options-disabled-overlay";
+            optionContainer.appendChild(overlay);
+
+            // 添加选项分组
+            this.createOptionGroups(optionContainer);
+
+            // 创建底部按钮容器
+            const buttonsContainer = document.createElement("div");
+            buttonsContainer.className = "tm_ui-buttons-container";
+            this.floatWindow.appendChild(buttonsContainer);
 
             // 创建恢复默认设置按钮
             this.resetButton = document.createElement("button");
-            this.resetButton.innerHTML = "恢复默认设置";
+            this.resetButton.innerHTML = "恢复默认";
             this.resetButton.id = "myResetButton";
-            this.floatWindow.appendChild(this.resetButton);
+            buttonsContainer.appendChild(this.resetButton);
 
             // 创建去GitHub按钮
             this.gotoRepoButton = document.createElement("button");
-            this.gotoRepoButton.innerHTML = "前往 GitHub 给作者点个 Star ⭐ ➡️";
+            // this.gotoRepoButton.innerHTML = "前往 GitHub 给作者点个 Star ⭐";
+            this.gotoRepoButton.innerHTML = `
+                <span class="goto-repo-btn-text">前往 GitHub 给作者点个 Star</span>
+                <svg aria-hidden="true" fill="currentColor" viewBox="0 0 47.94 47.94" xmlns="http://www.w3.org/2000/svg"
+                     width="12px" height="12px" class="goto-repo-btn-icon">
+                    <path
+                    d="M26.285,2.486l5.407,10.956c0.376,0.762,1.103,1.29,1.944,1.412l12.091,1.757
+                    c2.118,0.308,2.963,2.91,1.431,4.403l-8.749,8.528c-0.608,0.593-0.886,1.448-0.742,2.285l2.065,12.042
+                    c0.362,2.109-1.852,3.717-3.746,2.722l-10.814-5.685c-0.752-0.395-1.651-0.395-2.403,0l-10.814,5.685
+                    c-1.894,0.996-4.108-0.613-3.746-2.722l2.065-12.042c0.144-0.837-0.134-1.692-0.742-2.285l-8.749-8.528
+                    c-1.532-1.494-0.687-4.096,1.431-4.403l12.091-1.757c0.841-0.122,1.568-0.65,1.944-1.412l5.407-10.956
+                    C22.602,0.567,25.338,0.567,26.285,2.486z"
+                    ></path>
+                </svg>
+            `
             this.gotoRepoButton.id = "myGotoRepoButton";
-            this.floatWindow.appendChild(this.gotoRepoButton);
+            buttonsContainer.appendChild(this.gotoRepoButton);
 
             // 将浮窗添加到内容区
             document.getElementById("tmComplexContent").appendChild(this.floatWindow);
+        }
+
+        /**
+         * 创建选项分组
+         * @param {HTMLElement} container - 父容器
+         */
+        createOptionGroups(container) {
+            // 下载设置组
+            const downloadGroup = this.createOptionGroup(container, "下载设置", true);
+            this.addBoolOption({
+                id: "parallelDownload",
+                label: "批量并行下载模式",
+                defaultValue: true,
+                container: downloadGroup,
+                tooltip: "使用Iframe，能够获取JS动态的内容",
+            });
+            this.addBoolOption({
+                id: "fastDownload",
+                label: "批量高速下载模式（不推荐）",
+                defaultValue: false,
+                container: downloadGroup,
+                tooltip: "改用fetch，无法获取JS动态加载的内容",
+            });
+            this.addBoolOption({
+                id: "zipCategories",
+                label: "下载为压缩包",
+                defaultValue: true,
+                container: downloadGroup,
+            });
+            this.addBoolOption({
+                id: "addSerialNumber",
+                label: "批量下载时添加序号前缀",
+                defaultValue: true,
+                container: downloadGroup,
+                tooltip: '文件名会加入"No_"格式的序号前缀',
+            });
+            this.addStringOption({
+                id: "customFileName",
+                label: "自定义文件名模板",
+                defaultValue: "{title}",
+                container: downloadGroup,
+                tooltip: "可用变量：{title}、{date}、{author}",
+            });
+            this.addBoolOption({
+                id: "saveWebImages",
+                label: "将图片保存至本地",
+                defaultValue: true,
+                container: downloadGroup,
+            });
+            this.addBoolOption({
+                id: "saveAllImagesToAssets",
+                label: "图片保存至assets文件夹",
+                defaultValue: true,
+                container: downloadGroup,
+                tooltip: "如不启用，则保存到MD文件同名文件夹",
+            });
+            this.addIntOption({
+                id: "maxConcurrentDownloads",
+                label: "最大并行解析数",
+                defaultValue: 10,
+                container: downloadGroup,
+                min: 1,
+                max: 32,
+                step: 1,
+                tooltip: "设置批量下载时的最大并行数量",
+            });
+
+            // 文章内容组
+            const contentGroup = this.createOptionGroup(container, "文章内容");
+            this.addBoolOption({
+                id: "addArticleInfoInYaml",
+                label: "添加文章元信息",
+                defaultValue: false,
+                container: contentGroup,
+                tooltip: "以YAML格式添加，对于转Hexo博客比较有用",
+            });
+            this.addBoolOption({
+                id: "addArticleTitleToMarkdown",
+                label: "添加文章标题",
+                defaultValue: true,
+                container: contentGroup,
+                tooltip: "以一级标题形式添加",
+            });
+            this.addBoolOption({
+                id: "addArticleInfoInBlockquote",
+                label: "添加文章阅读量、点赞等信息",
+                defaultValue: true,
+                container: contentGroup,
+                tooltip: "以引用块形式添加",
+            });
+            this.addBoolOption({
+                id: "removeCSDNSearchLink",
+                label: "移除CSDN搜索链接",
+                defaultValue: true,
+                container: contentGroup,
+            });
+            this.addBoolOption({
+                id: "enableColorText",
+                label: "启用彩色文字",
+                defaultValue: true,
+                container: contentGroup,
+                tooltip: "使用<span>格式实现彩色文字",
+            });
+            this.addBoolOption({
+                id: "enableImageSize",
+                label: "启用图片宽高属性",
+                defaultValue: true,
+                container: contentGroup,
+                tooltip: "仅当网页提供宽高属性时生效",
+            });
+            this.addBoolOption({
+                id: "forceImageCentering",
+                label: "全部图片居中",
+                defaultValue: false,
+                container: contentGroup,
+                tooltip: "忽略网页原有的图片对齐方式，全部居中",
+            });
+
+            // 批量文章处理组
+            const batchGroup = this.createOptionGroup(container, "合并文章处理");
+            this.addBoolOption({
+                id: "mergeArticleContent",
+                label: "合并批量文章内容",
+                defaultValue: false,
+                container: batchGroup,
+                tooltip: "将多篇文章保存为单个MD文件",
+            });
+            this.addBoolOption({
+                id: "addSerialNumberToTitle",
+                label: "添加序号到文章标题前",
+                defaultValue: false,
+                container: batchGroup,
+                tooltip: "在合并文章时可能有用",
+            });
+            this.addBoolOption({
+                id: "addArticleInfoInBlockquote_batch",
+                label: "合并文章时添加栏目总信息",
+                defaultValue: true,
+                container: batchGroup,
+                tooltip: "以引用块形式添加栏目总阅读量、点赞等",
+            });
+        }
+
+        /**
+         * 创建选项分组
+         * @param {HTMLElement} container - 父容器
+         * @param {string} title - 分组标题
+         * @param {boolean} expanded - 是否展开（默认折叠）
+         * @returns {HTMLElement} - 创建的分组元素内容容器
+         */
+        createOptionGroup(container, title, expanded = false) {
+            const group = document.createElement("div");
+            group.className = "tm_ui-option-group" + (expanded ? "" : " tm_ui-option-group-collapsed");
+
+            // 创建分组头部（可点击折叠/展开）
+            const header = document.createElement("div");
+            header.className = "tm_ui-option-group-header";
+
+            const titleElem = document.createElement("div");
+            titleElem.className = "tm_ui-option-group-title";
+            titleElem.textContent = title;
+
+            // 创建折叠图标
+            const icon = document.createElement("span");
+            icon.className = "collapse-icon";
+            icon.innerHTML = `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4 6L8 10L12 6" stroke="#555555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>`;
+
+            header.appendChild(titleElem);
+            header.appendChild(icon);
+            group.appendChild(header);
+
+            // 创建内容区域
+            const content = document.createElement("div");
+            content.className = "tm_ui-option-group-content";
+            group.appendChild(content);
+
+            // 添加点击事件，实现折叠/展开功能
+            header.addEventListener("click", () => {
+                // 展开，则设置max-height为scrollHeight，折叠则为0
+                if (group.classList.contains("tm_ui-option-group-collapsed")) {
+                    group.classList.toggle("tm_ui-option-group-collapsed");
+                    content.style.maxHeight = content.scrollHeight + 16 + "px";
+                } else {
+                    group.classList.toggle("tm_ui-option-group-collapsed");
+                    content.style.maxHeight = "0px";
+                }
+            });
+
+            if (expanded) {
+                setTimeout(() => {
+                    content.style.maxHeight = content.scrollHeight + 16 + "px"; // 16是padding的总和
+                }, 100); // 确保在DOM渲染后执行
+            }
+
+            container.appendChild(group);
+            return content;
+        }
+
+        /**
+         * 添加布尔选项（复选框）
+         * @param {Object} option - 选项对象
+         * @param {string} option.id - 选项ID
+         * @param {string} option.label - 选项标签
+         * @param {boolean} option.defaultValue - 默认值
+         * @param {HTMLElement} option.container - 父容器
+         * @param {string} [option.tooltip=""] - 提示信息（可选）
+         * @param {Object} [option.constraints={}] - 约束条件（可选）
+         */
+        addBoolOption(option) {
+            const { id, label, defaultValue, container, tooltip = "", constraints = {} } = option;
+            // 注册到配置管理器
+            this.configManager.register(id, defaultValue);
+
+            const optionItem = document.createElement("div");
+            optionItem.className = "tm_ui-option-item";
+
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.id = id;
+            checkbox.checked = this.configManager.get(id);
+
+            const checkboxWrapper = document.createElement("label");
+            checkboxWrapper.className = "tm_ui-switch";
+            checkboxWrapper.appendChild(checkbox);
+            const slider = document.createElement("span");
+            slider.className = "tm_ui-switch-slider";
+            checkboxWrapper.appendChild(slider);
+
+            const labelElem = document.createElement("label");
+            labelElem.htmlFor = id;
+            labelElem.className = "tm_ui-option-label";
+            labelElem.textContent = label;
+
+            optionItem.appendChild(labelElem);
+            optionItem.appendChild(checkboxWrapper);
+
+            // 添加提示
+            if (tooltip) {
+                optionItem.appendChild(this.createTooltip(tooltip));
+            } else {
+                const tooltipElem = this.createTooltip("");
+                tooltipElem.style.visibility = "hidden"; // 默认隐藏
+                tooltipElem.style.opacity = "0"; // 默认透明
+                optionItem.appendChild(tooltipElem);
+            }
+
+            container.appendChild(optionItem);
+
+            // 事件监听
+            checkbox.addEventListener("change", () => {
+                this.configManager.set(id, checkbox.checked);
+
+                // 处理约束
+                if (checkbox.checked && constraints.true) {
+                    for (const constraint of constraints.true) {
+                        if (constraint.id !== undefined && constraint.value !== undefined) {
+                            this.configManager.set(constraint.id, constraint.value);
+                            this.updateOption(constraint.id);
+                        }
+                    }
+                } else if (!checkbox.checked && constraints.false) {
+                    for (const constraint of constraints.false) {
+                        if (constraint.id !== undefined && constraint.value !== undefined) {
+                            this.configManager.set(constraint.id, constraint.value);
+                            this.updateOption(constraint.id);
+                        }
+                    }
+                }
+            });
+
+            return optionItem;
+        }
+
+        /**
+         * 添加整数选项（数字输入框）
+         * @param {Object} option - 选项对象
+         * @param {string} option.id - 选项ID
+         * @param {string} option.label - 选项标签
+         * @param {number} option.defaultValue - 默认值
+         * @param {HTMLElement} option.container - 父容器
+         * @param {number} option.min - 最小值
+         * @param {number} option.max - 最大值
+         * @param {number} option.step - 步长
+         * @param {string} [option.tooltip=""] - 提示信息
+         */
+        addIntOption(option) {
+            const { id, label, defaultValue, container, min, max, step, tooltip = "" } = option;
+            // 注册到配置管理器
+            this.configManager.register(id, defaultValue);
+
+            const optionItem = document.createElement("div");
+            optionItem.className = "tm_ui-option-item";
+
+            const labelElem = document.createElement("label");
+            labelElem.className = "tm_ui-option-label";
+            labelElem.textContent = label;
+
+            const inputContainer = document.createElement("div");
+            inputContainer.className = "tm_ui-input-container";
+
+            const input = document.createElement("input");
+            input.type = "number";
+            input.className = "tm_ui-input-number";
+            input.id = id;
+            input.min = min;
+            input.max = max;
+            input.step = step;
+            input.value = this.configManager.get(id);
+
+            inputContainer.appendChild(input);
+
+            optionItem.appendChild(labelElem);
+            optionItem.appendChild(inputContainer);
+
+            // 添加提示
+            if (tooltip) {
+                optionItem.appendChild(this.createTooltip(tooltip));
+            }
+
+            container.appendChild(optionItem);
+
+            // 事件监听
+            input.addEventListener("change", () => {
+                let value = parseInt(input.value);
+                if (isNaN(value)) value = defaultValue;
+                if (value < min) value = min;
+                if (value > max) value = max;
+
+                input.value = value;
+                this.configManager.set(id, value);
+            });
+
+            return optionItem;
+        }
+
+        /**
+         * 添加浮点数选项（滑块）
+         * @param {Object} option - 选项对象
+         * @param {string} option.id - 选项ID
+         * @param {string} option.label - 选项标签
+         * @param {number} option.defaultValue - 默认值
+         * @param {HTMLElement} option.container - 父容器
+         * @param {number} option.min - 最小值
+         * @param {number} option.max - 最大值
+         * @param {number} option.step - 步长
+         * @param {string} [option.tooltip=""] - 提示信息
+         */
+        addFloatOption(option) {
+            const { id, label, defaultValue, container, min, max, step, tooltip = "" } = option;
+            // 注册到配置管理器
+            this.configManager.register(id, defaultValue);
+
+            const optionItem = document.createElement("div");
+            optionItem.className = "tm_ui-option-item";
+
+            const labelElem = document.createElement("label");
+            labelElem.className = "tm_ui-option-label";
+            labelElem.textContent = label;
+
+            // 创建滑块容器
+            const inputContainer = document.createElement("div");
+            inputContainer.className = "tm_ui-input-container";
+
+            const rangeContainer = document.createElement("div");
+            rangeContainer.className = "tm_ui-range-container";
+
+            const slider = document.createElement("input");
+            slider.type = "range";
+            slider.className = "tm_ui-range-input";
+            slider.id = id;
+            slider.min = min;
+            slider.max = max;
+            slider.step = step;
+            slider.value = this.configManager.get(id);
+
+            const valueDisplay = document.createElement("span");
+            valueDisplay.className = "tm_ui-range-value";
+            valueDisplay.textContent = slider.value;
+
+            rangeContainer.appendChild(slider);
+            rangeContainer.appendChild(valueDisplay);
+            inputContainer.appendChild(rangeContainer);
+
+            optionItem.appendChild(labelElem);
+            optionItem.appendChild(inputContainer);
+
+            // 添加提示
+            if (tooltip) {
+                optionItem.appendChild(this.createTooltip(tooltip));
+            }
+
+            container.appendChild(optionItem);
+
+            // 事件监听
+            slider.addEventListener("input", () => {
+                valueDisplay.textContent = slider.value;
+                this.configManager.set(id, parseFloat(slider.value));
+            });
+
+            return optionItem;
+        }
+
+        /**
+         * 添加字符串选项（文本框）
+         * @param {Object} option - 选项对象
+         * @param {string} option.id - 选项ID
+         * @param {string} option.label - 选项标签
+         * @param {string} option.defaultValue - 默认值
+         * @param {HTMLElement} option.container - 父容器
+         * @param {string} [option.tooltip=""] - 提示信息
+         */
+        addStringOption(option) {
+            const { id, label, defaultValue, container, tooltip = "" } = option;
+            // 注册到配置管理器
+            this.configManager.register(id, defaultValue);
+
+            const optionItem = document.createElement("div");
+            optionItem.className = "tm_ui-option-item";
+
+            const labelElem = document.createElement("label");
+            labelElem.className = "tm_ui-option-label";
+            labelElem.textContent = label;
+
+            const inputContainer = document.createElement("div");
+            inputContainer.className = "tm_ui-input-container";
+
+            const input = document.createElement("input");
+            input.type = "text";
+            input.className = "tm_ui-input-text";
+            input.id = id;
+            input.value = this.configManager.get(id);
+
+            inputContainer.appendChild(input);
+
+            optionItem.appendChild(labelElem);
+            optionItem.appendChild(inputContainer);
+
+            // 添加提示
+            if (tooltip) {
+                optionItem.appendChild(this.createTooltip(tooltip));
+            }
+
+            container.appendChild(optionItem);
+
+            // 事件监听
+            input.addEventListener("change", () => {
+                this.configManager.set(id, input.value);
+            });
+
+            return optionItem;
+        }
+
+        /**
+         * 添加下拉选择选项
+         * @param {Object} option - 选项对象
+         * @param {string} option.id - 选项ID
+         * @param {string} option.label - 选项标签
+         * @param {string} option.defaultValue - 默认值
+         * @param {HTMLElement} option.container - 父容器
+         * @param {Array} option.options - 选项数组，格式为[{value: '', label: ''}]
+         * @param {string} [option.tooltip=""] - 提示信息
+         */
+        addSelectOption(option) {
+            const { id, label, defaultValue, container, options, tooltip = "" } = option;
+            // 注册到配置管理器
+            this.configManager.register(id, defaultValue);
+
+            const optionItem = document.createElement("div");
+            optionItem.className = "tm_ui-option-item";
+
+            const labelElem = document.createElement("label");
+            labelElem.className = "tm_ui-option-label";
+            labelElem.textContent = label;
+
+            const inputContainer = document.createElement("div");
+            inputContainer.className = "tm_ui-input-container";
+
+            const select = document.createElement("select");
+            select.className = "tm_ui-select";
+            select.id = id;
+
+            // 添加选项
+            options.forEach((option) => {
+                const optElem = document.createElement("option");
+                optElem.value = option.value;
+                optElem.textContent = option.label;
+                select.appendChild(optElem);
+            });
+
+            // 设置当前值
+            select.value = this.configManager.get(id);
+
+            inputContainer.appendChild(select);
+
+            optionItem.appendChild(labelElem);
+            optionItem.appendChild(inputContainer);
+
+            // 添加提示
+            if (tooltip) {
+                optionItem.appendChild(this.createTooltip(tooltip));
+            }
+
+            container.appendChild(optionItem);
+
+            // 事件监听
+            select.addEventListener("change", () => {
+                this.configManager.set(id, select.value);
+            });
+
+            return optionItem;
+        }
+
+        /**
+         * 创建提示工具
+         * @param {string} text - 提示文本
+         * @returns {HTMLElement} 提示元素
+         */
+        createTooltip(text) {
+            const tooltip = document.createElement("div");
+            tooltip.className = "tm_ui-tooltip";
+
+            const icon = document.createElement("div");
+            icon.className = "tm_ui-tooltip-icon";
+            icon.textContent = "?";
+
+            const tooltipText = document.createElement("div");
+            tooltipText.className = "tm_ui-tooltip-text";
+            tooltipText.textContent = text;
+
+            tooltip.appendChild(icon);
+            tooltip.appendChild(tooltipText);
+
+            return tooltip;
+        }
+
+        /**
+         * 更新指定选项的UI状态
+         * @param {string} id - 选项ID
+         */
+        updateOption(id) {
+            const element = document.getElementById(id);
+            if (!element) return;
+
+            const value = this.configManager.get(id);
+
+            switch (element.type) {
+                case "checkbox":
+                    element.checked = value;
+                    break;
+                case "range":
+                case "number":
+                case "text":
+                    element.value = value;
+                    break;
+                case "select-one":
+                    element.value = value;
+                    break;
+            }
+        }
+
+        /**
+         * 更新所有选项的状态
+         */
+        updateAllOptions() {
+            for (const id of this.configManager.getAllKeys()) {
+                this.updateOption(id);
+            }
         }
 
         /**
@@ -536,9 +1363,9 @@
 
             // 默认设置按钮点击事件
             this.resetButton.addEventListener("click", () => {
-                Object.entries(this.defaultOptions).forEach(([id, value]) => GM_setValue(id, value));
+                this.configManager.resetToDefaults();
                 this.updateAllOptions();
-                this.showFloatTip("已恢复默认设置", 1000);
+                this.showFloatTip("已恢复默认设置", 1500);
             });
 
             // GitHub按钮点击事件
@@ -549,17 +1376,24 @@
             // 拖拽功能
             const draggable = document.getElementById("draggable");
             draggable.addEventListener("mousedown", (e) => {
-                this.isDragging = true;
-                this.offsetX = e.clientX - draggable.offsetLeft;
-                this.offsetY = e.clientY - draggable.offsetTop;
+                if (e.target === this.mainButton || this.mainButton.contains(e.target)) {
+                    this.isDragging = true;
+                    this.offsetX = e.clientX - draggable.offsetLeft;
+                    this.offsetY = e.clientY - draggable.offsetTop;
+                }
             });
 
             document.addEventListener("mousemove", (e) => {
                 if (this.isDragging) {
-                    // draggable.style.left = `${e.clientX - offsetX}px`;  // 左侧拖拽
-                    // draggable.style.top = `${e.clientY - this.offsetY}px`;
                     draggable.style.top =
-                        Math.min(window.innerHeight - 100, Math.max(0, e.clientY - this.offsetY)) + "px"; // 限制在窗口内
+                        Math.min(window.innerHeight - 100, Math.max(0, e.clientY - this.offsetY)) + "px";
+                }
+            });
+
+            document.addEventListener("mouseup", () => {
+                if (this.isDragging) {
+                    this.isDragging = false;
+                    GM_setValue("draggableTop", draggable.style.top);
                 }
             });
 
@@ -569,11 +1403,6 @@
                 if (savedTop) {
                     this.container.style.top = Math.min(window.innerHeight - 100, parseInt(savedTop)) + "px";
                 }
-            });
-
-            document.addEventListener("mouseup", () => {
-                this.isDragging = false;
-                GM_setValue("draggableTop", draggable.style.top);
             });
 
             // 监听窗口聚焦事件
@@ -601,86 +1430,22 @@
         }
 
         /**
-         * 添加选项
-         * @param {string} id - 选项ID
-         * @param {string} innerHTML - 选项文本
-         * @param {boolean} defaultValue - 默认值
-         * @param {HTMLElement} container - 父容器
-         * @param {Object} constraints - 约束条件
-         */
-        addOption(id, innerHTML, defaultValue, container, constraints = {}) {
-            this.defaultOptions[id] = defaultValue;
-
-            if (GM_getValue(id) === undefined) {
-                GM_setValue(id, defaultValue);
-            }
-            const checked = GM_getValue(id);
-            const optionDiv = document.createElement("div");
-            optionDiv.style.display = "flex";
-            optionDiv.style.alignItems = "left";
-
-            const optionCheckbox = document.createElement("input");
-            optionCheckbox.type = "checkbox";
-            optionCheckbox.checked = checked;
-            optionCheckbox.id = id + "Checkbox";
-            optionCheckbox.style.marginRight = "5px";
-
-            const optionLabel = document.createElement("label");
-            optionLabel.htmlFor = optionCheckbox.id;
-            optionLabel.textContent = innerHTML;
-            optionLabel.style.marginRight = "10px";
-
-            optionDiv.appendChild(optionCheckbox);
-            optionDiv.appendChild(optionLabel);
-
-            this.optionDivList.push(optionDiv);
-            this.optionCheckBoxList.push(optionCheckbox);
-            container.appendChild(optionDiv);
-
-            optionCheckbox.addEventListener("change", () => {
-                GM_setValue(id, optionCheckbox.checked);
-                if (optionCheckbox.checked) {
-                    if (constraints.true) {
-                        for (const constraint of constraints.true) {
-                            if (constraint.id !== undefined && constraint.value !== undefined) {
-                                GM_setValue(constraint.id, constraint.value);
-                            }
-                        }
-                        this.updateAllOptions();
-                    }
-                } else {
-                    if (constraints.false) {
-                        for (const constraint of constraints.false) {
-                            if (constraint.id !== undefined && constraint.value !== undefined) {
-                                GM_setValue(constraint.id, constraint.value);
-                            }
-                        }
-                        this.updateAllOptions();
-                    }
-                }
-            });
-        }
-
-        /**
-         * 更新所有选项的状态
-         */
-        updateAllOptions() {
-            this.optionCheckBoxList.forEach((optionElem) => {
-                optionElem.checked = GM_getValue(optionElem.id.replace("Checkbox", ""));
-            });
-        }
-
-        /**
          * 启用悬浮窗
          */
         enableFloatWindow() {
             this.downloadButton.disabled = false;
-            this.downloadButton.innerHTML =
-                "下载CSDN文章为Markdown<br>（支持专栏、文章、用户全部文章页面）<br>（推荐使用typora打开下载的Markdown）";
+            this.downloadButton.innerHTML = "下载CSDN文章为Markdown<br>（支持专栏、文章、用户全部文章页面）";
             this.resetButton.disabled = false;
-            this.optionCheckBoxList.forEach((optionElem) => {
-                optionElem.disabled = false;
+
+            // 启用所有输入元素
+            const inputs = this.floatWindow.querySelectorAll("input, select");
+            inputs.forEach((input) => {
+                input.disabled = false;
             });
+
+            // 隐藏遮罩层
+            const overlay = this.floatWindow.querySelector(".tm_ui-options-disabled-overlay");
+            if (overlay) overlay.style.display = "none";
         }
 
         /**
@@ -690,9 +1455,16 @@
             this.downloadButton.innerHTML = "正在下载，请稍候...";
             this.downloadButton.disabled = true;
             this.resetButton.disabled = true;
-            this.optionCheckBoxList.forEach((optionElem) => {
-                optionElem.disabled = true;
+
+            // 禁用所有输入元素
+            const inputs = this.floatWindow.querySelectorAll("input, select");
+            inputs.forEach((input) => {
+                input.disabled = true;
             });
+
+            // 显示遮罩层
+            const overlay = this.floatWindow.querySelector(".tm_ui-options-disabled-overlay");
+            if (overlay) overlay.style.display = "block";
         }
 
         /**
@@ -709,12 +1481,13 @@
                 floatTip.style.top = "40%";
                 floatTip.style.left = "50%";
                 floatTip.style.transform = "translateX(-50%)";
-                floatTip.style.padding = "10px";
-                floatTip.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
+                floatTip.style.padding = "7px 10px";
+                floatTip.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
                 floatTip.style.color = "#fff";
-                floatTip.style.borderRadius = "5px";
-                floatTip.style.boxShadow = "0 2px 5px rgba(0, 0, 0, 0.5)";
-                floatTip.style.zIndex = "9999";
+                floatTip.style.borderRadius = "3px";
+                floatTip.style.boxShadow = "0 2px 8px rgba(0, 0, 0, 0.2)";
+                floatTip.style.zIndex = "10000";
+                floatTip.style.fontSize = "12px";
                 floatTip.innerHTML = text;
                 floatTip.id = "myInfoFloatTip";
                 document.body.appendChild(floatTip);
@@ -748,8 +1521,9 @@
             overlay.style.left = "0";
             overlay.style.width = "100vw";
             overlay.style.height = "100vh";
-            overlay.style.background = "rgba(0,0,0,0.3)";
+            overlay.style.background = "rgba(0,0,0,0.5)";
             overlay.style.zIndex = "10000";
+            overlay.style.backdropFilter = "blur(2px)";
             overlay.id = "tm_confirm_overlay";
 
             // 创建对话框
@@ -759,72 +1533,77 @@
             dialog.style.left = "50%";
             dialog.style.transform = "translate(-50%, -50%)";
             dialog.style.background = "#fff";
-            dialog.style.padding = "24px 32px";
-            dialog.style.borderRadius = "12px";
-            dialog.style.boxShadow = "0 4px 24px rgba(0,0,0,0.18)";
+            dialog.style.padding = "16px 20px";
+            dialog.style.borderRadius = "8px";
+            dialog.style.boxShadow = "0 3px 16px rgba(0,0,0,0.25)";
             dialog.style.textAlign = "center";
-            dialog.style.minWidth = "420px";
+            dialog.style.minWidth = "280px";
             dialog.style.maxWidth = "90vw";
             dialog.style.wordBreak = "break-all";
+            dialog.style.fontSize = "13px";
 
             // 提示文本
             const msg = document.createElement("div");
             msg.innerHTML = message.replace(/\n/g, "<br>");
-            msg.style.marginBottom = "18px";
+            msg.style.marginBottom = "15px";
             msg.style.textAlign = "left"; // 向左对齐
+            msg.style.lineHeight = "1.5";
+            msg.style.color = "#333";
             dialog.appendChild(msg);
 
             // 按钮容器
             const btnBox = document.createElement("div");
             btnBox.style.display = "flex";
             btnBox.style.justifyContent = "center";
-            btnBox.style.gap = "18px";
+            btnBox.style.gap = "12px";
 
             // 确认按钮
             const okBtn = document.createElement("button");
             okBtn.textContent = "确定";
-            okBtn.style.padding = "6px 18px";
+            okBtn.style.padding = "5px 16px";
             okBtn.style.background = "linear-gradient(135deg, #12c2e9 0%, #c471ed 50%, #f64f59 100%)";
             okBtn.style.color = "#fff";
             okBtn.style.border = "none";
-            okBtn.style.borderRadius = "5px";
+            okBtn.style.borderRadius = "3px";
             okBtn.style.cursor = "pointer";
             okBtn.style.transition = "all 0.3s ease";
+            okBtn.style.fontWeight = "bold";
+            okBtn.style.fontSize = "12px";
             okBtn.onmouseover = () => {
                 okBtn.style.transform = "scale(1.05)";
+                okBtn.style.boxShadow = "0 1px 5px rgba(0,0,0,0.15)";
             };
             okBtn.onmouseout = () => {
                 okBtn.style.transform = "scale(1)";
+                okBtn.style.boxShadow = "none";
             };
             okBtn.onclick = () => {
                 document.body.removeChild(overlay);
                 if (typeof onConfirm === "function") onConfirm();
-                // 检查是否有等待的对话框
-                if (this.comfirmDialogQueue.length > 0) {
-                    const nextDialog = this.comfirmDialogQueue.shift();
-                    this.comfirmDialogActive = false; // 重置状态
-                    this.showConfirmDialog(nextDialog.message, nextDialog.onConfirm, nextDialog.onCancel);
-                }
+                this.processNextDialog();
             };
 
             // 取消按钮
             const cancelBtn = document.createElement("button");
             cancelBtn.textContent = "取消";
-            cancelBtn.style.padding = "6px 18px";
-            cancelBtn.style.background = "#ccc";
+            cancelBtn.style.padding = "5px 16px";
+            cancelBtn.style.background = "#f0f0f0";
             cancelBtn.style.color = "#333";
             cancelBtn.style.border = "none";
-            cancelBtn.style.borderRadius = "5px";
+            cancelBtn.style.borderRadius = "3px";
             cancelBtn.style.cursor = "pointer";
+            cancelBtn.style.transition = "all 0.2s ease";
+            cancelBtn.style.fontSize = "12px";
+            cancelBtn.onmouseover = () => {
+                cancelBtn.style.background = "#e0e0e0";
+            };
+            cancelBtn.onmouseout = () => {
+                cancelBtn.style.background = "#f0f0f0";
+            };
             cancelBtn.onclick = () => {
                 document.body.removeChild(overlay);
                 if (typeof onCancel === "function") onCancel();
-                // 检查是否有等待的对话框
-                if (this.comfirmDialogQueue.length > 0) {
-                    const nextDialog = this.comfirmDialogQueue.shift();
-                    this.comfirmDialogActive = false; // 重置状态
-                    this.showConfirmDialog(nextDialog.message, nextDialog.onConfirm, nextDialog.onCancel);
-                }
+                this.processNextDialog();
             };
 
             btnBox.appendChild(cancelBtn);
@@ -835,7 +1614,21 @@
         }
 
         /**
+         * 处理队列中的下一个对话框
+         */
+        processNextDialog() {
+            this.comfirmDialogActive = false;
+            if (this.comfirmDialogQueue.length > 0) {
+                const nextDialog = this.comfirmDialogQueue.shift();
+                setTimeout(() => {
+                    this.showConfirmDialog(nextDialog.message, nextDialog.onConfirm, nextDialog.onCancel);
+                }, 100);
+            }
+        }
+
+        /**
          * 跳转到 GitHub issue 页面，并将信息参数化到 URL 中
+         * @param {string} title - 标题
          * @param {string} info - 要传递的信息
          */
         gotoGithubIssue(title, info) {
@@ -855,6 +1648,94 @@
         }
     }
 
+    /**
+     * 配置管理器类
+     * 用于管理应用配置
+     */
+    class ConfigManager {
+        constructor() {
+            this.configs = new Map();
+            this.defaults = new Map();
+        }
+
+        /**
+         * 注册配置项
+         * @param {string} key - 配置键
+         * @param {any} defaultValue - 默认值
+         */
+        register(key, defaultValue) {
+            this.defaults.set(key, defaultValue);
+
+            // 如果未设置，则使用默认值
+            if (GM_getValue(key) === undefined) {
+                GM_setValue(key, defaultValue);
+            }
+
+            // 加入配置映射
+            this.configs.set(key, GM_getValue(key));
+        }
+
+        /**
+         * 获取配置项值
+         * @param {string} key - 配置键
+         * @returns {any} 配置值
+         */
+        get(key) {
+            // 直接从GM_getValue获取最新值
+            return GM_getValue(key);
+        }
+
+        /**
+         * 设置配置项值
+         * @param {string} key - 配置键
+         * @param {any} value - 配置值
+         */
+        set(key, value) {
+            GM_setValue(key, value);
+            this.configs.set(key, value);
+        }
+
+        /**
+         * 重置所有配置到默认值
+         */
+        resetToDefaults() {
+            for (const [key, defaultValue] of this.defaults.entries()) {
+                this.set(key, defaultValue);
+            }
+        }
+
+        /**
+         * 获取所有配置键
+         * @returns {Array} 配置键数组
+         */
+        getAllKeys() {
+            return Array.from(this.configs.keys());
+        }
+
+        /**
+         * 导出所有配置
+         * @returns {Object} 配置对象
+         */
+        exportAll() {
+            const result = {};
+            for (const key of this.getAllKeys()) {
+                result[key] = this.get(key);
+            }
+            return result;
+        }
+
+        /**
+         * 导入配置
+         * @param {Object} configs - 配置对象
+         */
+        importAll(configs) {
+            for (const [key, value] of Object.entries(configs)) {
+                if (this.configs.has(key)) {
+                    this.set(key, value);
+                }
+            }
+        }
+    }
     /**
      * 模块: 文件管理
      * 处理文件相关的操作
@@ -1085,96 +1966,6 @@
         }
 
         /**
-         * 将文件队列打包为ZIP下载
-         * @param {string} zipName - ZIP文件名
-         */
-        async saveAllFileToZip_old(zipName, progressCallback = null, finalCallback = null) {
-            if (this.fileQueue.length === 0) {
-                console.error("没有文件需要保存");
-                return;
-            }
-
-            zipName = Utils.safeFilename(zipName);
-            // 创建JSZip实例
-            const zip = new JSZip();
-
-            // 使用 for...of 循环替代 forEach，以便正确处理 async/await
-            for (let idx = 0; idx < this.fileQueue.length; idx++) {
-                let status = true;
-                const file = this.fileQueue[idx];
-                // content 可能是 promise（Blob对象），需要等待
-                if (file.content instanceof Promise) {
-                    if (progressCallback) {
-                        progressCallback(`正在下载资源：${file.filename} (${idx + 1}/${this.fileQueue.length})`);
-                    }
-                    try {
-                        file.content = await file.content; // 等待Blob对象
-                    } catch (err) {
-                        if (progressCallback) {
-                            progressCallback(`下载资源失败：${err}`);
-                        }
-                        status = false;
-                    }
-                }
-                if (!status) {
-                    continue; // 如果下载失败，跳过当前文件
-                }
-                // 将文件添加到ZIP中
-                zip.file(file.filename, file.content);
-            }
-
-            // 获取当前时间，以便计算剩余时间
-            const startTime = Date.now();
-
-            // 生成ZIP文件
-            zip.generateAsync({ type: "blob" }, (metadata) => {
-                // 进度回调
-                if (progressCallback) {
-                    // metadata.percent: 当前进度百分比
-                    // metadata.currentFile: 当前正在处理的文件名
-                    progressCallback(
-                        `正在打包：${metadata.currentFile} (${Math.round(
-                            metadata.percent
-                        )}%)(剩余时间：${Utils.formatSeconds(
-                            ((Date.now() - startTime) / 1000 / metadata.percent) * (100 - metadata.percent)
-                        )})`
-                    );
-                }
-            })
-                .then((blob) => {
-                    // 调用最终回调
-                    if (finalCallback) {
-                        finalCallback(
-                            `打包完成：${zipName}.zip，文件大小：${(blob.size / 1024 / 1024).toFixed(
-                                2
-                            )} MB\n请等待下载完成。`
-                        );
-                    }
-                    // 创建下载链接
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = `${zipName}.zip`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                    this.clearFileQueue(); // 清空文件队列
-                    this.clearImageCache(); // 清空图片缓存
-                })
-                .catch((error) => {
-                    // 处理错误
-                    console.error("Error generating ZIP file:", error);
-                    if (finalCallback) {
-                        finalCallback(`下载失败：${zipName}.zip，错误信息：${error}`);
-                        throw new Error(`下载失败：${zipName}.zip，错误信息：${error}`);
-                    }
-                    this.clearFileQueue(); // 清空文件队列
-                    this.clearImageCache(); // 清空图片缓存
-                });
-        }
-
-        /**
          * 使用 fflate 将文件打包成 ZIP，支持进度回调
          * @param {Array<{name: string, data: Uint8Array|string}>} files - 文件对象数组
          * @param {function(number, string):void} [onProgress] - 可选的进度回调，接收百分比和文件名
@@ -1306,17 +2097,11 @@
                     }
                 },
                 async (error) => {
-                    // 先进行降级处理，如果观察稳定，则可以去掉降级逻辑
-                    // 如果发生错误，降级至JSZip
-                    if (progressCallback) {
-                        progressCallback(`下载失败：${zipName}.zip，降级至JSzip。错误信息：${error}`);
-                        await this.saveAllFileToZip_old(zipName, progressCallback, finalCallback);
+                    console.error("Error generating ZIP file:", error);
+                    if (finalCallback && typeof finalCallback === "function") {
+                        finalCallback(`下载失败：${zipName}.zip，错误信息：${error}`);
+                        throw new Error(`下载失败：${zipName}.zip，错误信息：${error}`);
                     }
-                    // console.error("Error generating ZIP file:", error);
-                    // if (finalCallback && typeof finalCallback === "function") {
-                    //     finalCallback(`下载失败：${zipName}.zip，错误信息：${error}`);
-                    //     throw new Error(`下载失败：${zipName}.zip，错误信息：${error}`);
-                    // }
                 }
             );
 
@@ -1367,745 +2152,6 @@
             this.clearImageCache();
         }
     }
-
-    // /**
-    //  * 模块: Markdown转换
-    //  * 将HTML转换为Markdown
-    //  */
-    // class MarkdownConverter {
-    //     /**
-    //      * @param {FileManager} fileManager - 文件管理实例
-    //      *
-    //      * @constructor
-    //      **/
-    //     constructor(fileManager) {
-    //         this.fileManager = fileManager;
-    //     }
-
-    //     /**
-    //      * 将HTML内容转换为Markdown格式
-    //      * @param {Element} articleElement - 文章DOM元素
-    //      * @param {string} assetDirName - 资源文件夹名
-    //      * @param {boolean} enableTOC - 是否启用目录
-    //      * @returns {Promise<string>} Markdown内容
-    //      */
-    //     async htmlToMarkdown(articleElement, assetDirName = "", enableTOC = true, imgPrefix = "") {
-    //         // 预定义的特殊字段
-    //         // 内容之间保持两个换行符
-    //         const CONSTANT_DOUBLE_NEW_LINE = "<|CSDN2MD@CONSTANT_DOUBLE_NEW_LINE@23hy7b|>";
-    //         // 分隔符用于美化，比如公式和文本之间加上空格会更美观
-    //         const SEPARATION_BEAUTIFICATION = "<|CSDN2MD@SEPARATION_BEAUTIFICATION@2caev2|>";
-
-    //         // 处理预定义的特殊字段
-    //         const DDNL = escapeRegExp(CONSTANT_DOUBLE_NEW_LINE);
-    //         const SEPB = escapeRegExp(SEPARATION_BEAUTIFICATION);
-
-    //         /**
-    //          * 特殊字符串修剪函数：移除字符串开头和结尾的分隔符(SEPB)和空白字符
-    //          * @param {string} [text=""] - 需要修剪的字符串 / The string to be trimmed
-    //          * @returns {string} 修剪后的字符串 / The trimmed string
-    //          */
-    //         function SpecialTrim(text = "") {
-    //             return text.replace(new RegExp(`^(?:${SEPB}|\\s)+`), "").replace(new RegExp(`(?:${SEPB}|\\s)+$`), "");
-    //         }
-
-    //         // 1. 连续的 "\n" 与 CONSTANT_DOUBLE_NEW_LINE 替换为 "\n\n"
-    //         const RE_DOUBLE_NL = new RegExp(`(?:\\n|${DDNL})*${DDNL}(?:\\n|${DDNL})*`, "g");
-    //         // 2. 连续的 SEPARATION_BEAUTIFICATION 替换为 " "，但如果前面是换行符，替换为 ""
-    //         const RE_SEP_NOLINE = new RegExp(`(?<!\\n)(?:${SEPB})+`, "g");
-    //         const RE_SEP_WITHNL = new RegExp(`(\\n)(?:${SEPB})+`, "g");
-
-    //         // 辅助：对常量做正则转义
-    //         function escapeRegExp(s) {
-    //             return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    //         }
-
-    //         // 辅助函数，用于转义特殊的Markdown字符
-    //         const escapeMarkdown = (text) => {
-    //             // return text.replace(/([\\`*_\{\}\[\]()#+\-.!])/g, "\\$1").trim();
-    //             return text.trim(); // 不转义特殊字符
-    //         };
-
-    //         /**
-    //          * 递归处理DOM节点并将其转换为Markdown
-    //          * @param {Node} node - 当前DOM节点
-    //          * @param {number} listLevel - 当前列表嵌套级别
-    //          * @returns {Promise<string>} 节点的Markdown字符串
-    //          */
-    //         const processNode = async (node, listLevel = 0) => {
-    //             let result = "";
-    //             const ELEMENT_NODE = 1;
-    //             const TEXT_NODE = 3;
-    //             const COMMENT_NODE = 8;
-
-    //             switch (node.nodeType) {
-    //                 case ELEMENT_NODE:
-    //                     // 处理元素节点
-    //                     switch (node.tagName.toLowerCase()) {
-    //                         case "h1":
-    //                         case "h2":
-    //                         case "h3":
-    //                         case "h4":
-    //                         case "h5":
-    //                         case "h6":
-    //                             {
-    //                                 const htype = Number(node.tagName[1]);
-
-    //                                 // FIX: 修复该页面中，hx标签的内容中有其他标签，而这里直接使用了textContent，造成内容丢失的BUG
-    //                                 // URL: https://blog.csdn.net/naozibuok/article/details/142671763
-    //                                 // <<< FIX BEGIN >>>
-
-    //                                 // 不再直接使用textContent
-    //                                 // result += `${"#".repeat(htype)} ${node.textContent.trim()}\n\n`;
-
-    //                                 // 移除节点内部开头的 <a> 标签
-    //                                 node.querySelectorAll("a").forEach((aTag) => {
-    //                                     if (aTag && aTag.textContent.trim() === "") {
-    //                                         aTag.remove();
-    //                                     }
-    //                                 });
-    //                                 // // 创建一个浮动的div元素，作为打印hx标签的内容，因为console.log被重写了
-    //                                 // let hxContent = document.getElementById("hxContent");
-    //                                 // if (!hxContent) {
-    //                                 //     hxContent = document.createElement("div");
-    //                                 //     hxContent.id = "hxContent";
-    //                                 //     hxContent.style.position = "absolute";
-    //                                 //     hxContent.style.left = "0";
-    //                                 //     hxContent.style.top = "0";
-    //                                 //     hxContent.style.zIndex = "9999";
-    //                                 //     hxContent.style.backgroundColor = "lightgray";
-    //                                 //     hxContent.style.border = "1px solid black";
-    //                                 //     hxContent.style.padding = "10px";
-    //                                 //     hxContent.style.width = "auto";
-    //                                 //     hxContent.style.height = "auto";
-    //                                 //     hxContent.style.whiteSpace = "pre-wrap";
-    //                                 //     hxContent.style.fontSize = "16px";
-    //                                 //     document.body.appendChild(hxContent);
-    //                                 // }
-    //                                 // hxContent.innerHTML += node.nodeType + " " + node.tagName + "<br>";
-    //                                 // hxContent.innerHTML += `Original: <br><textarea readonly rows="3" cols="100">${node.outerHTML}</textarea><br>`;
-    //                                 // 处理节点内部元素，包括hx标签的文本
-    //                                 let childContent = await processChildren(node, listLevel);
-    //                                 // hxContent.innerHTML += `Processed: <br><textarea readonly rows="3" cols="100">${childContent}</textarea><br>`;
-    //                                 const hPrefix = "#".repeat(htype);
-    //                                 // 按行分割分别处理。
-    //                                 // 如果该行内容不为空，则添加前缀。
-    //                                 childContent = childContent
-    //                                     .split("\n")
-    //                                     .map((line) => {
-    //                                         if (line.trim() !== "") {
-    //                                             // 如果该行内容是 <img /> 标签，则不添加前缀
-    //                                             if (
-    //                                                 line.trim().search("<img") !== -1 &&
-    //                                                 line.trim().search("/>") !== -1
-    //                                             ) {
-    //                                                 return line;
-    //                                             }
-    //                                             return `${hPrefix} ${line}`;
-    //                                         } else {
-    //                                             return line;
-    //                                         }
-    //                                     })
-    //                                     .join("\n");
-    //                                 // hxContent.innerHTML += `Markdown: <br><textarea readonly rows="1" cols="100">${childContent.replaceAll(
-    //                                 //     "\n",
-    //                                 //     "\\n"
-    //                                 // )}</textarea><br><hr>`;
-    //                                 result += `${childContent}${CONSTANT_DOUBLE_NEW_LINE}`;
-    //                                 // <<< FIX END >>>
-    //                             }
-    //                             break;
-    //                         case "p":
-    //                             {
-    //                                 const cls = node.getAttribute("class");
-    //                                 const style = node.getAttribute("style");
-    //                                 if (cls && cls.includes("img-center")) {
-    //                                     // Same as <center> tag
-    //                                     node.childNodes.forEach((child) => {
-    //                                         if (
-    //                                             child.nodeType === ELEMENT_NODE &&
-    //                                             child.tagName.toLowerCase() === "img"
-    //                                         ) {
-    //                                             if (!child.getAttribute("src").includes("#pic_center")) {
-    //                                                 child.setAttribute(
-    //                                                     "src",
-    //                                                     child.getAttribute("src") + "#pic_center"
-    //                                                 );
-    //                                             }
-    //                                         }
-    //                                     });
-    //                                     result += await processChildren(node, listLevel);
-    //                                     result += CONSTANT_DOUBLE_NEW_LINE;
-    //                                     break;
-    //                                 }
-    //                                 if (node.getAttribute("id") === "main-toc") {
-    //                                     if (enableTOC) {
-    //                                         result += `**目录**\n\n[TOC]\n\n`;
-    //                                     }
-    //                                     break;
-    //                                 }
-    //                                 let text = await processChildren(node, listLevel);
-    //                                 if (style) {
-    //                                     if (style.includes("padding-left")) {
-    //                                         break;
-    //                                     }
-    //                                     if (style.includes("text-align:center")) {
-    //                                         text = `<div style="text-align:center;">${Utils.shrinkHtml(
-    //                                             node.innerHTML
-    //                                         )}</div>\n\n`;
-    //                                     } else if (style.includes("text-align:right")) {
-    //                                         text = `<div style="text-align:right;">${Utils.shrinkHtml(
-    //                                             node.innerHTML
-    //                                         )}</div>\n\n`;
-    //                                     } else if (style.includes("text-align:justify")) {
-    //                                         text += "\n\n";
-    //                                     } else {
-    //                                         text += "\n\n";
-    //                                     }
-    //                                 } else {
-    //                                     text += "\n\n";
-    //                                 }
-    //                                 result += text;
-    //                             }
-    //                             break;
-    //                         case "strong":
-    //                         case "b":
-    //                             result += `${SEPARATION_BEAUTIFICATION}**${SpecialTrim(
-    //                                 await processChildren(node, listLevel)
-    //                             )}**${SEPARATION_BEAUTIFICATION}`;
-    //                             break;
-    //                         case "em":
-    //                         case "i":
-    //                             result += `${SEPARATION_BEAUTIFICATION}*${SpecialTrim(
-    //                                 await processChildren(node, listLevel)
-    //                             )}*${SEPARATION_BEAUTIFICATION}`;
-    //                             break;
-    //                         case "u":
-    //                             result += `${SEPARATION_BEAUTIFICATION}<u>${SpecialTrim(
-    //                                 await processChildren(node, listLevel)
-    //                             )}</u>${SEPARATION_BEAUTIFICATION}`;
-    //                             break;
-    //                         case "s":
-    //                         case "strike":
-    //                             result += `${SEPARATION_BEAUTIFICATION}~~${SpecialTrim(
-    //                                 await processChildren(node, listLevel)
-    //                             )}~~${SEPARATION_BEAUTIFICATION}`;
-    //                             break;
-    //                         case "a":
-    //                             {
-    //                                 const node_class = node.getAttribute("class");
-    //                                 if (node_class && node_class.includes("footnote-backref")) {
-    //                                     break;
-    //                                 }
-    //                                 const href = node.getAttribute("href") || "";
-    //                                 if (node_class && node_class.includes("has-card")) {
-    //                                     const desc = node.title || "";
-    //                                     result += `[${desc}](${href}) `;
-    //                                     break;
-    //                                 }
-    //                                 const text = await processChildren(node, listLevel);
-    //                                 if (
-    //                                     href.includes("https://so.csdn.net/so/search") &&
-    //                                     GM_getValue("removeCSDNSearchLink")
-    //                                 ) {
-    //                                     result += `${text}`;
-    //                                     break;
-    //                                 }
-    //                                 result += `${SEPARATION_BEAUTIFICATION}[${text}](${href})${SEPARATION_BEAUTIFICATION}`;
-    //                             }
-    //                             break;
-    //                         case "img":
-    //                             {
-    //                                 let src = node.getAttribute("src") || "";
-    //                                 const alt = node.getAttribute("alt") || "";
-    //                                 const cls = node.getAttribute("class") || "";
-    //                                 const width = node.getAttribute("width") || "";
-    //                                 const height = node.getAttribute("height") || "";
-
-    //                                 if (cls.includes("mathcode")) {
-    //                                     result += `${SEPARATION_BEAUTIFICATION}\$\$\n${alt}\n\$\$`;
-    //                                 } else {
-    //                                     if (src.includes("#pic_center") || GM_getValue("forceImageCentering")) {
-    //                                         result += CONSTANT_DOUBLE_NEW_LINE;
-    //                                     } else {
-    //                                         result += " ";
-    //                                     }
-    //                                     if (GM_getValue("saveWebImages")) {
-    //                                         src = await this.fileManager.saveWebImageToLocal(
-    //                                             src,
-    //                                             assetDirName,
-    //                                             imgPrefix
-    //                                         );
-    //                                     }
-    //                                     if (height && GM_getValue("enableImageSize")) {
-    //                                         // 如果 height 是数字，则添加 px
-    //                                         // 如果带有单位，则直接使用
-    //                                         const heightValue = height.replace(/[^0-9]/g, "");
-    //                                         const heightUnit = height.replace(/[0-9]/g, "") || "px";
-    //                                         const heightStyle = heightValue
-    //                                             ? `max-height:${heightValue}${heightUnit};`
-    //                                             : "";
-    //                                         result += `<img src="${src}" alt="${alt}" style="${heightStyle} box-sizing:content-box;" />`;
-    //                                     } else if (width && GM_getValue("enableImageSize")) {
-    //                                         // 如果 width 是数字，则添加 px
-    //                                         // 如果带有单位，则直接使用
-    //                                         const widthValue = width.replace(/[^0-9]/g, "");
-    //                                         const widthUnit = width.replace(/[0-9]/g, "") || "px";
-    //                                         const widthStyle = widthValue ? `max-width:${widthValue}${widthUnit};` : "";
-    //                                         result += `<img src="${src}" alt="${alt}" style="${widthStyle} box-sizing:content-box;" />`;
-    //                                     } else {
-    //                                         result += `![${alt}](${src})`;
-    //                                     }
-    //                                     result += CONSTANT_DOUBLE_NEW_LINE;
-    //                                 }
-    //                             }
-    //                             break;
-    //                         case "ul":
-    //                             result += await processList(node, listLevel, false);
-    //                             break;
-    //                         case "ol":
-    //                             result += await processList(node, listLevel, true);
-    //                             break;
-    //                         case "blockquote":
-    //                             {
-    //                                 const text = (await processChildren(node, listLevel))
-    //                                     .trim()
-    //                                     .split("\n")
-    //                                     .map((line) => (line ? `> ${line}` : "> "))
-    //                                     .join("\n");
-    //                                 result += `${text}\n\n`;
-    //                             }
-    //                             break;
-    //                         case "pre":
-    //                             {
-    //                                 const codeNode = node.querySelector("code");
-    //                                 if (codeNode) {
-    //                                     const className = codeNode.className || "";
-    //                                     let language = "";
-    //                                     // 新版本的代码块，class含有language-xxx
-    //                                     if (className.includes("language-")) {
-    //                                         const languageMatch = className.split(" ");
-    //                                         // 找到第一个language-开头的字符串
-    //                                         for (const item of languageMatch) {
-    //                                             if (item.startsWith("language-")) {
-    //                                                 language = item;
-    //                                                 break;
-    //                                             }
-    //                                         }
-    //                                         language = language.replace("language-", "");
-    //                                     }
-    //                                     // 老版本的代码块
-    //                                     else if (className.startsWith("hljs")) {
-    //                                         const languageMatch = className.split(" ");
-    //                                         language = languageMatch ? languageMatch[1] : "";
-    //                                     }
-    //                                     result += `\`\`\`${language}\n${await processCodeBlock(codeNode)}\`\`\`\n\n`;
-    //                                 } else {
-    //                                     console.warn("Code block without <code> element:", node.outerHTML);
-    //                                     const codeText = node.textContent.replace(/^\s+|\s+$/g, "");
-    //                                     result += `\`\`\`\n${codeText}\n\`\`\`\n\n`;
-    //                                 }
-    //                             }
-    //                             break;
-    //                         case "code":
-    //                             {
-    //                                 const codeText = node.textContent;
-    //                                 result += `${SEPARATION_BEAUTIFICATION}\`${codeText}\`${SEPARATION_BEAUTIFICATION}`;
-    //                             }
-    //                             break;
-    //                         case "hr":
-    //                             if (node.getAttribute("id") !== "hr-toc") {
-    //                                 result += `---\n\n`;
-    //                             }
-    //                             break;
-    //                         case "br":
-    //                             result += `\n`;
-    //                             break;
-    //                         case "table":
-    //                             result += (await processTable(node)) + "\n\n";
-    //                             break;
-    //                         case "div":
-    //                             {
-    //                                 const className = node.getAttribute("class") || "";
-    //                                 if (className.includes("csdn-video-box")) {
-    //                                     const iframe = node.querySelector("iframe");
-    //                                     const src = iframe.getAttribute("src") || "";
-    //                                     const title = node.querySelector("p").textContent || "";
-    //                                     const iframeHTML = iframe.outerHTML.replace(
-    //                                         "></iframe>",
-    //                                         ' style="width: 100%; aspect-ratio: 2;"></iframe>'
-    //                                     );
-    //                                     result += `<div align="center" style="border: 3px solid gray;border-radius: 27px;overflow: hidden;"> <a class="link-info" href="${src}" rel="nofollow" title="${title}">${title}</a>${iframeHTML}</div>\n\n`;
-    //                                 } else if (className.includes("toc")) {
-    //                                     const customTitle = node.querySelector("h4")?.textContent || "";
-    //                                     if (enableTOC) {
-    //                                         result += `**${customTitle}**\n\n[TOC]\n\n`;
-    //                                     }
-    //                                 } else {
-    //                                     result += `${await processChildren(node, listLevel)}\n`;
-    //                                 }
-    //                             }
-    //                             break;
-    //                         case "span":
-    //                             {
-    //                                 const node_class = node.getAttribute("class");
-    //                                 if (node_class) {
-    //                                     if (
-    //                                         node_class.includes("katex--inline") ||
-    //                                         node_class.includes("katex--display")
-    //                                     ) {
-    //                                         const katex_mathml_elem = node.querySelector(".katex-mathml");
-    //                                         const katex_html_elem = node.querySelector(".katex-html");
-    //                                         if (katex_mathml_elem !== null && katex_html_elem !== null) {
-    //                                             // 移除.katex-mathml里的.MathJax_Display类，否则会造成错乱
-    //                                             if (
-    //                                                 katex_mathml_elem.querySelector(".MathJax_Display") &&
-    //                                                 katex_mathml_elem.querySelector("script")
-    //                                             ) {
-    //                                                 katex_mathml_elem
-    //                                                     .querySelectorAll(".MathJax_Display")
-    //                                                     .forEach((elem) => elem.remove());
-    //                                             }
-    //                                             if (
-    //                                                 katex_mathml_elem.querySelector(".MathJax_Preview") &&
-    //                                                 katex_mathml_elem.querySelector("script")
-    //                                             ) {
-    //                                                 katex_mathml_elem
-    //                                                     .querySelectorAll(".MathJax_Preview")
-    //                                                     .forEach((elem) => elem.remove());
-    //                                             }
-    //                                             if (
-    //                                                 katex_mathml_elem.querySelector(".MathJax_Error") &&
-    //                                                 katex_mathml_elem.querySelector("script")
-    //                                             ) {
-    //                                                 katex_mathml_elem
-    //                                                     .querySelectorAll(".MathJax_Error")
-    //                                                     .forEach((elem) => elem.remove());
-    //                                             }
-
-    //                                             const mathml = Utils.clearSpecialChars(katex_mathml_elem.textContent);
-    //                                             const katex_html = Utils.clearSpecialChars(katex_html_elem.textContent);
-    //                                             if (node_class.includes("katex--inline")) {
-    //                                                 if (mathml.startsWith(katex_html)) {
-    //                                                     result += `${SEPARATION_BEAUTIFICATION}\$${mathml.replace(
-    //                                                         katex_html,
-    //                                                         ""
-    //                                                     )}\$${SEPARATION_BEAUTIFICATION}`;
-    //                                                 } else {
-    //                                                     result += `${SEPARATION_BEAUTIFICATION}\$${Utils.clearKatexMathML(
-    //                                                         katex_mathml_elem.textContent
-    //                                                     )}\$${SEPARATION_BEAUTIFICATION}`;
-    //                                                 }
-    //                                             } else {
-    //                                                 if (mathml.startsWith(katex_html)) {
-    //                                                     result += `${CONSTANT_DOUBLE_NEW_LINE}\$\$\n${mathml.replace(
-    //                                                         katex_html,
-    //                                                         ""
-    //                                                     )}\n\$\$${CONSTANT_DOUBLE_NEW_LINE}`;
-    //                                                 } else {
-    //                                                     result += `${CONSTANT_DOUBLE_NEW_LINE}\$\$\n${Utils.clearKatexMathML(
-    //                                                         katex_mathml_elem.textContent
-    //                                                     )}\n\$\$${CONSTANT_DOUBLE_NEW_LINE}`;
-    //                                                 }
-    //                                             }
-    //                                         }
-    //                                         break;
-    //                                     }
-    //                                 }
-    //                                 const style = node.getAttribute("style") || "";
-    //                                 if (
-    //                                     (style.includes("background-color") || style.includes("color")) &&
-    //                                     GM_getValue("enableColorText")
-    //                                 ) {
-    //                                     result += `<span style="${style}">${await processChildren(
-    //                                         node,
-    //                                         listLevel
-    //                                     )}</span>`;
-    //                                 } else {
-    //                                     result += await processChildren(node, listLevel);
-    //                                 }
-    //                             }
-    //                             break;
-    //                         case "kbd":
-    //                             result += `${SEPARATION_BEAUTIFICATION}<kbd>${node.textContent}</kbd>${SEPARATION_BEAUTIFICATION}`;
-    //                             break;
-    //                         case "mark":
-    //                             result += `${SEPARATION_BEAUTIFICATION}<mark>${await processChildren(
-    //                                 node,
-    //                                 listLevel
-    //                             )}</mark>${SEPARATION_BEAUTIFICATION}`;
-    //                             break;
-    //                         case "sub":
-    //                             result += `<sub>${await processChildren(node, listLevel)}</sub>`;
-    //                             break;
-    //                         case "sup":
-    //                             {
-    //                                 const node_class = node.getAttribute("class");
-    //                                 if (node_class && node_class.includes("footnote-ref")) {
-    //                                     result += `[^${node.textContent}]`;
-    //                                 } else {
-    //                                     result += `<sup>${await processChildren(node, listLevel)}</sup>`;
-    //                                 }
-    //                             }
-    //                             break;
-    //                         case "svg":
-    //                             {
-    //                                 const style = node.getAttribute("style");
-    //                                 if (style && style.includes("display: none")) {
-    //                                     break;
-    //                                 }
-    //                                 // 为foreignObject里的div添加属性xmlns="http://www.w3.org/1999/xhtml"，否则typora无法识别
-    //                                 const foreignObjects = node.querySelectorAll("foreignObject");
-    //                                 for (const foreignObject of foreignObjects) {
-    //                                     const divs = foreignObject.querySelectorAll("div");
-    //                                     divs.forEach((div) => {
-    //                                         div.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
-    //                                     });
-    //                                 }
-    //                                 if (GM_getValue("saveWebImages")) {
-    //                                     const svgSavePath = await this.fileManager.saveSvgToLocal(
-    //                                         node.outerHTML,
-    //                                         assetDirName,
-    //                                         imgPrefix
-    //                                     );
-    //                                     result += `![](${svgSavePath})${CONSTANT_DOUBLE_NEW_LINE}`;
-    //                                 } else {
-    //                                     // 检查是否有style标签存在于svg元素内，如果有则转换为base64形式
-    //                                     if (node.querySelector("style")) {
-    //                                         // 将SVG转换为base64编码
-    //                                         const base64 = Utils.svgToBase64(node.outerHTML);
-    //                                         result += `![](data:image/svg+xml;base64,${base64})${CONSTANT_DOUBLE_NEW_LINE}`;
-    //                                     } else {
-    //                                         result += `<div align="center">${node.outerHTML}</div>${CONSTANT_DOUBLE_NEW_LINE}`;
-    //                                     }
-    //                                 }
-    //                             }
-    //                             break;
-    //                         case "section": // 这个是注脚的内容
-    //                             {
-    //                                 const node_class = node.getAttribute("class");
-    //                                 if (node_class && node_class.includes("footnotes")) {
-    //                                     result += await processFootnotes(node);
-    //                                 }
-    //                             }
-    //                             break;
-    //                         case "input":
-    //                             // 仅处理checkbox类型的input元素
-    //                             if (node.getAttribute("type") === "checkbox") {
-    //                                 result += `[${node.checked ? "x" : " "}] `;
-    //                             }
-    //                             break;
-    //                         case "dl":
-    //                             // 自定义列表，直接用html
-    //                             result += `${Utils.shrinkHtml(node.outerHTML)}\n\n`;
-    //                             break;
-    //                         case "abbr":
-    //                             result += `${Utils.shrinkHtml(node.outerHTML)}`;
-    //                             break;
-    //                         case "font":
-    //                             // 避免进入 default : https://blog.csdn.net/azhengye/article/details/8481846
-    //                             result += await processChildren(node, listLevel);
-    //                             break;
-    //                         case "td":
-    //                         case "th":
-    //                             // 处理表格单元格
-    //                             result += await processChildren(node, listLevel);
-    //                             break;
-    //                         case "center":
-    //                             // 处理居中标签
-    //                             if (node.childNodes.length === 1 && node.childNodes[0].nodeType === TEXT_NODE) {
-    //                                 result += `<center>${node.textContent.trim().replace("\n", "<br>")}</center>\n\n`;
-    //                             } else {
-    //                                 node.childNodes.forEach((child) => {
-    //                                     if (child.nodeType === ELEMENT_NODE && child.tagName.toLowerCase() === "img") {
-    //                                         if (!child.getAttribute("src").includes("#pic_center")) {
-    //                                             child.setAttribute("src", child.getAttribute("src") + "#pic_center");
-    //                                         }
-    //                                     }
-    //                                 });
-    //                                 result += await processChildren(node, listLevel);
-    //                                 result += CONSTANT_DOUBLE_NEW_LINE;
-    //                             }
-    //                             break;
-    //                         default:
-    //                             result += await processChildren(node, listLevel);
-    //                             result += CONSTANT_DOUBLE_NEW_LINE;
-    //                             break;
-    //                     }
-    //                     break;
-    //                 case TEXT_NODE:
-    //                     // 处理文本节点（即没有被单独的标签包裹的文本）
-    //                     result += escapeMarkdown(node.textContent);
-    //                     break;
-    //                 case COMMENT_NODE:
-    //                     // 忽略注释
-    //                     break;
-    //                 default:
-    //                     break;
-    //             }
-    //             return result;
-    //         };
-
-    //         /**
-    //          * 处理给定节点的子节点
-    //          * @param {Node} node - 父节点
-    //          * @param {number} listLevel - 当前列表嵌套级别
-    //          * @returns {Promise<string>} 子节点拼接后的Markdown字符串
-    //          */
-    //         const processChildren = async (node, listLevel) => {
-    //             let text = "";
-    //             for (const child of node.childNodes) {
-    //                 text += await processNode(child, listLevel);
-    //             }
-    //             return text;
-    //         };
-
-    //         /**
-    //          * 处理列表元素
-    //          * @param {Element} node - 列表元素
-    //          * @param {number} listLevel - 当前列表嵌套级别
-    //          * @param {boolean} ordered - 列表是否有序
-    //          * @returns {Promise<string>} 列表的Markdown字符串
-    //          */
-    //         const processList = async (node, listLevel, ordered) => {
-    //             let text = CONSTANT_DOUBLE_NEW_LINE;
-    //             const children = Array.from(node.children).filter((child) => child.tagName.toLowerCase() === "li");
-    //             for (let index = 0; index < children.length; index++) {
-    //                 const child = children[index];
-
-    //                 let prefix = ordered ? `${index + 1}. ` : `- `;
-    //                 let indent = ordered ? "   " : "  ";
-
-    //                 let childText = `${await processChildren(child, listLevel + 1)}`;
-
-    //                 // 由于缩进，这里必须先替换掉 CONSTANT_DOUBLE_NEW_LINE
-    //                 childText = childText.replace(RE_DOUBLE_NL, "\n\n");
-
-    //                 childText = childText
-    //                     .split("\n")
-    //                     .map((line, index) => {
-    //                         // 如果是空行，则不添加缩进
-    //                         if (line.trim() === "" || index === 0) {
-    //                             return line;
-    //                         }
-    //                         // 否则添加缩进
-    //                         return `${indent}${line}`;
-    //                     })
-    //                     .join("\n");
-
-    //                 text += `${prefix}${childText}${CONSTANT_DOUBLE_NEW_LINE}`;
-    //             }
-    //             // text += `\n`;
-    //             return text;
-    //         };
-
-    //         /**
-    //          * 处理表格
-    //          * @param {Element} node - 包含表格的元素
-    //          * @returns {Promise<string>} 表格的Markdown字符串
-    //          */
-    //         const processTable = async (node) => {
-    //             const rows = Array.from(node.querySelectorAll("tr"));
-    //             if (rows.length === 0) return "";
-
-    //             let table = "";
-
-    //             // 处理表头
-    //             const headerCells = Array.from(rows[0].querySelectorAll("th, td"));
-    //             const headers = await Promise.all(
-    //                 headerCells.map(async (cell) => (await processNode(cell)).trim().replaceAll(RE_DOUBLE_NL, "<br />"))
-    //             );
-    //             table += `| ${headers.join(" | ")} |\n`;
-
-    //             // 处理分隔符
-    //             const alignments = headerCells.map((cell) => {
-    //                 const align = cell.getAttribute("align");
-    //                 if (align === "center") {
-    //                     return ":---:";
-    //                 } else if (align === "right") {
-    //                     return "---:";
-    //                 } else if (align === "left") {
-    //                     return ":---";
-    //                 } else {
-    //                     return ":---:";
-    //                 }
-    //             });
-    //             table += `|${alignments.join("|")}|\n`;
-
-    //             // 处理表格内容
-    //             for (let i = 1; i < rows.length; i++) {
-    //                 const cells = Array.from(rows[i].querySelectorAll("td"));
-    //                 const row = await Promise.all(
-    //                     cells.map(async (cell) => (await processNode(cell)).trim().replaceAll(RE_DOUBLE_NL, "<br />"))
-    //                 );
-    //                 table += `| ${row.join(" | ")} |`;
-    //                 if (i < rows.length - 1) {
-    //                     table += "\n";
-    //                 }
-    //             }
-    //             return table;
-    //         };
-
-    //         /**
-    //          * 处理代码块
-    //          * @param {Element} codeNode - 包含代码的元素
-    //          * @returns {Promise<string>} 代码块的Markdown字符串
-    //          */
-    //         const processCodeBlock = async (codeNode) => {
-    //             // 查找code内部是否有ol元素
-    //             const node = codeNode.querySelector("ol");
-
-    //             // 确保传入的节点是一个<ol>元素
-    //             if (!node || node.tagName.toLowerCase() !== "ol") {
-    //                 // 如果没有ol元素，则说明是老版本，直接返回codeNode的textContent
-    //                 return codeNode.textContent.replace(/\n$/, "") + "\n";
-    //             }
-
-    //             // 获取所有<li>子元素
-    //             const listItems = node.querySelectorAll("li");
-    //             let result = "";
-
-    //             // 遍历每个<li>元素
-    //             listItems.forEach((li) => {
-    //                 result += li.textContent;
-    //                 result += "\n";
-    //             });
-
-    //             return result;
-    //         };
-
-    //         /**
-    //          * 处理脚注
-    //          * @param {Element} node - 包含脚注的元素
-    //          * @returns {Promise<string>} 脚注的Markdown字符串
-    //          */
-    //         const processFootnotes = async (node) => {
-    //             const footnotes = Array.from(node.querySelectorAll("li"));
-    //             let result = "";
-
-    //             for (let index = 0; index < footnotes.length; index++) {
-    //                 const li = footnotes[index];
-    //                 const text = (await processNode(li)).replaceAll("\n", " ").replaceAll("↩︎", "").trim();
-    //                 result += `[^${index + 1}]: ${text}\n`;
-    //             }
-
-    //             return result;
-    //         };
-
-    //         let markdown = "";
-    //         for (const child of articleElement.childNodes) {
-    //             markdown += await processNode(child);
-    //         }
-    //         markdown = markdown.trim();
-
-    //         markdown = markdown
-    //             .replaceAll(RE_DOUBLE_NL, "\n\n") // 1. 吃掉前后重复换行和标记，统一为两个换行
-    //             .replaceAll(RE_SEP_NOLINE, " ") // 2.a 非换行前的标记串 → 空格
-    //             .replaceAll(RE_SEP_WITHNL, "$1"); // 2.b 换行后的标记串 → 保留换行
-
-    //         return markdown;
-    //     }
-    // }
 
     /**
      * 模块: Markdown转换
