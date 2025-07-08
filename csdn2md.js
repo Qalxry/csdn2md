@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      2.2.4
+// @version      2.2.5
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -249,6 +249,8 @@
             this.initStyles();
             this.initUI();
             this.setupEventListeners();
+            this.comfirmDialogQueue = [];
+            this.comfirmDialogActive = false;
         }
 
         /**
@@ -732,6 +734,13 @@
          * @param {function} onCancel - 取消回调
          */
         showConfirmDialog(message, onConfirm, onCancel) {
+            if (this.comfirmDialogActive) {
+                // 如果已有对话框在显示，加入队列
+                this.comfirmDialogQueue.push({ message, onConfirm, onCancel });
+                return;
+            }
+            this.comfirmDialogActive = true;
+
             // 创建遮罩层
             const overlay = document.createElement("div");
             overlay.style.position = "fixed";
@@ -790,6 +799,12 @@
             okBtn.onclick = () => {
                 document.body.removeChild(overlay);
                 if (typeof onConfirm === "function") onConfirm();
+                // 检查是否有等待的对话框
+                if (this.comfirmDialogQueue.length > 0) {
+                    const nextDialog = this.comfirmDialogQueue.shift();
+                    this.comfirmDialogActive = false; // 重置状态
+                    this.showConfirmDialog(nextDialog.message, nextDialog.onConfirm, nextDialog.onCancel);
+                }
             };
 
             // 取消按钮
@@ -804,6 +819,12 @@
             cancelBtn.onclick = () => {
                 document.body.removeChild(overlay);
                 if (typeof onCancel === "function") onCancel();
+                // 检查是否有等待的对话框
+                if (this.comfirmDialogQueue.length > 0) {
+                    const nextDialog = this.comfirmDialogQueue.shift();
+                    this.comfirmDialogActive = false; // 重置状态
+                    this.showConfirmDialog(nextDialog.message, nextDialog.onConfirm, nextDialog.onCancel);
+                }
             };
 
             btnBox.appendChild(cancelBtn);
@@ -2217,23 +2238,31 @@
                 const originalUrl = url; // 保存原始URL
                 let isRedirected = false; // 重置重定向标志
 
+                const hasCaptcha = (doc) => {
+                    return doc.body.querySelector(".text-wrap")?.textContent.includes("安全验证");
+                };
+
                 const onCheckPassed = () => {
                     // 创建一个隐藏的iframe
                     const iframe = document.createElement("iframe");
-                    // // for debugging
-                    // iframe.style.position = "fixed";
-                    // iframe.style.top = "50%";
-                    // iframe.style.left = "50%";
-                    // iframe.style.transform = "translate(-50%, -50%)";
-                    // iframe.style.width = "80vw";
-                    // iframe.style.height = "80vh";
-                    // iframe.style.zIndex = "99999";
-                    // iframe.style.background = "#fff";
-                    // iframe.style.boxShadow = "0 4px 24px rgba(0,0,0,0.18)";
-                    // iframe.style.border = "2px solid #12c2e9";
-                    // iframe.style.borderRadius = "12px";
-                    // iframe.style.opacity = "0.6";
-                    iframe.style.display = "none"; // 隐藏iframe
+                    const showIframe = (iframe_element) => {
+                        iframe_element.style.display = "block"; // 显示iframe
+                        iframe_element.style.position = "fixed";
+                        iframe_element.style.top = "50%";
+                        iframe_element.style.left = "50%";
+                        iframe_element.style.transform = "translate(-50%, -50%)";
+                        iframe_element.style.width = "80vw";
+                        iframe_element.style.height = "80vh";
+                        iframe_element.style.zIndex = "99999";
+                        iframe_element.style.background = "#fff";
+                        iframe_element.style.boxShadow = "0 4px 24px rgba(0,0,0,0.18)";
+                        iframe_element.style.border = "2px solid #12c2e9";
+                        iframe_element.style.borderRadius = "12px";
+                    };
+                    const hideIframe = (iframe_element) => {
+                        iframe_element.style.display = "none"; // 隐藏iframe
+                    };
+                    hideIframe(iframe); // 初始隐藏iframe
                     document.body.appendChild(iframe);
                     iframe.src = url;
 
@@ -2242,6 +2271,26 @@
                         console.dir(`iframe加载完成，开始下载文章： Url: ${url}`);
                         try {
                             const doc = iframe.contentDocument || iframe.contentWindow.document;
+
+                            // 检查是否有验证码
+                            if (hasCaptcha(doc)) {
+                                console.dir(`(downloadArticleInIframe) 检测到验证码： Url: ${url}`);
+                                this.uiManager.showConfirmDialog(
+                                    `(downloadArticleInIframe) 检测到验证码，您需要手动验证通过后，再刷新页面重新进行下载。\n点击确认将显示该验证页面，若取消则无法下载。\nUrl: ${url}`,
+                                    async () => {
+                                        // 用户点击确认后，重新加载iframe
+                                        console.dir(`(downloadArticleInIframe) 用户确认验证码处理： Url: ${url}`);
+                                        showIframe(iframe);
+                                    },
+                                    () => {
+                                        // 用户点击取消后，移除iframe并拒绝Promise
+                                        console.dir(`(downloadArticleInIframe) 用户取消验证码处理： Url: ${url}`);
+                                        document.body.removeChild(iframe);
+                                    }
+                                );
+                                return;
+                            }
+
                             // 调用解析函数
                             await this.parseArticle(doc.body, false, url, prefix);
                             // 移除iframe
@@ -2283,6 +2332,8 @@
                     };
                 };
 
+                const uiManager = this.uiManager;
+
                 // FIX: 使用 GM_xmlhttpRequest 检测是否存在重定向
                 // https://github.com/Qalxry/csdn2md/issues/6
                 // https://github.com/Qalxry/csdn2md/issues/7
@@ -2301,11 +2352,16 @@
                             console.dir(
                                 `(downloadArticleInIframe) 文章页面状态码异常：Url: ${url} Response Status: ${response.status}`
                             );
-                            const error = new Error(
-                                `(downloadArticleInIframe) 文章页面状态码异常：Url: ${url} Response Status: ${response.status}`
-                            );
-                            reject(error);
-                            return;
+                            if (response.status === 521) {
+                                uiManager.showFloatTip(
+                                    `(downloadArticleInIframe) 检查文章 ${url} 时状态码异常：${response.status}，有下载失败的可能性。`
+                                );
+                            } else {
+                                const newError = new Error(
+                                    `(downloadArticleInIframe) 文章页面状态码异常：Url: ${url} Response Status: ${response.status}`
+                                );
+                                reject(newError);
+                            }
                         } else {
                             console.dir(`(downloadArticleInIframe) 文章页面加载成功：${url}`);
                         }
@@ -2854,20 +2910,47 @@
         async unfoldHideArticleBox(document_body) {
             // 展开隐藏的文章内容
             const hideArticleBox = document_body.querySelector(".hide-article-box");
-            if (hideArticleBox) {
-                let isHidden = false;
-                hideArticleBox.querySelectorAll("*").forEach((elem) => {
-                    if (elem.textContent.includes("阅读全文")) {
-                        elem.click();
-                        isHidden = true;
-                    }
-                });
-                // 等待 1s
-                if (isHidden) {
-                    console.dir("已展开隐藏的文章内容。");
-                    await new Promise((resolve) => setTimeout(resolve, 1000));
-                }
+            if (!hideArticleBox) return;
+
+            const readAllContentBtn = hideArticleBox.querySelector(".read-all-content-btn");
+            if (!readAllContentBtn) return;
+
+            readAllContentBtn.click();
+            console.dir("已展开隐藏的文章内容。");
+
+            // 动态等待 #article_content 加载完成
+            const articleContent = document.querySelector("#article_content");
+            if (!articleContent) {
+                throw new Error("未找到文章内容元素 #article_content");
             }
+
+            // 创建动态等待函数
+            const waitForContentStable = (element, timeout = 30000, stabilityDelay = 1000) => {
+                return new Promise((resolve, reject) => {
+                    let stabilityTimer = null;
+                    let timeoutTimer = null;
+                    const observer = new MutationObserver(() => {
+                        if (timeoutTimer) {
+                            clearTimeout(timeoutTimer);
+                            timeoutTimer = null; // 清除超时计时器
+                        }
+                        if (stabilityTimer) clearTimeout(stabilityTimer);
+                        stabilityTimer = setTimeout(resolve, stabilityDelay); // 重置稳定倒计时
+                    });
+                    observer.observe(element, {
+                        childList: true, // 监听子元素变化
+                        subtree: true, // 监听所有后代
+                        attributes: true, // 监听属性变化
+                    });
+                    // 设置超时强制返回
+                    setTimeout(() => {
+                        observer.disconnect();
+                        reject(new Error(`等待加载超时 (${timeout}ms)`));
+                    }, timeout);
+                });
+            };
+            await waitForContentStable(articleContent);
+            console.dir("内容展开完成");
         }
 
         /**
