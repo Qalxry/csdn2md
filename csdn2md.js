@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         (dev) csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      3.0.0
+// @version      3.0.1
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -32,23 +32,23 @@
          */
         clearSpecialChars(str) {
             return str
-                .replace(/[\s]{2,}/g, "")
-                .replace(
+                .replaceAll(/[\s]{2,}/g, "")
+                .replaceAll(
                     /[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF\u00AD\u034F\u061C\u180E\u2800\u3164\uFFA0\uFFF9-\uFFFB]/g,
                     ""
                 )
-                .replace("⎧", "")
-                .replace("⎨", "{")
-                .replace("⎩", "")
-                .replace("⎫", "")
-                .replace("⎬", "}")
-                .replace("⎭", "")
-                .replace("⎡", "[")
-                .replace("⎢", "")
-                .replace("⎣", "")
-                .replace("⎤", "]")
-                .replace("⎥", "")
-                .replace("⎦", "");
+                .replaceAll("⎧", "")
+                .replaceAll("⎨", "{")
+                .replaceAll("⎩", "")
+                .replaceAll("⎫", "")
+                .replaceAll("⎬", "}")
+                .replaceAll("⎭", "")
+                .replaceAll("⎡", "[")
+                .replaceAll("⎢", "")
+                .replaceAll("⎣", "")
+                .replaceAll("⎤", "]")
+                .replaceAll("⎥", "")
+                .replaceAll("⎦", "");
         },
 
         /**
@@ -75,7 +75,7 @@
          * @returns {string} 清理后的URL
          */
         clearUrl(url) {
-            return url.replace(/[?#@!$&'()*+,;=].*$/, "");
+            return url.replaceAll(/[?#@!$&'()*+,;=].*$/g, "");
         },
 
         /**
@@ -84,7 +84,7 @@
          * @returns {string} 安全的文件名
          */
         safeFilename(filename) {
-            return filename.replace(/[\\/:*?"<>|]/g, "_");
+            return filename.replaceAll(/[\\/:*?"<>|]/g, "_");
         },
 
         /**
@@ -94,9 +94,9 @@
          */
         shrinkHtml(html) {
             return html
-                .replace(/>\s+</g, "><") // 去除标签之间的空白
-                .replace(/\s{2,}/g, " ") // 多个空格压缩成一个
-                .replace(/^\s+|\s+$/g, ""); // 去除首尾空白
+                .replaceAll(/>\s+</g, "><") // 去除标签之间的空白
+                .replaceAll(/\s{2,}/g, " ") // 多个空格压缩成一个
+                .replaceAll(/^\s+|\s+$/g, ""); // 去除首尾空白
         },
 
         /**
@@ -228,9 +228,13 @@
      * 处理界面相关的功能，支持多种输入类型和分组
      */
     class UIManager {
-        constructor(fileManager, downloadManager) {
-            this.fileManager = fileManager;
-            this.downloadManager = downloadManager;
+        /**
+         * 创建UI管理器
+         **/
+        constructor() {
+            this.configManager = new ConfigManager(); // 配置管理
+            this.downloadManager = new ArticleDownloader(); // 下载管理器
+            this.downloadManager.setUIManager(this); // 设置UI与下载管理器的双向引用
             this.isDragging = 0;
             this.offsetX = 0;
             this.offsetY = 0;
@@ -243,15 +247,13 @@
             this.isOpen = false;
             this.repo_url = "https://github.com/Qalxry/csdn2md";
 
-            // 配置管理
-            this.configManager = new ConfigManager();
-
             // 初始化
             this.initStyles();
             this.initUI();
             this.setupEventListeners();
-            this.comfirmDialogQueue = [];
-            this.comfirmDialogActive = false;
+            this.confirmDialogQueue = [];
+            this.confirmDialogActive = false;
+            this.updateAllOptions();
         }
 
         /**
@@ -442,6 +444,7 @@
                 color: white;
                 font-size: 9px;
                 font-weight: bold;
+                user-select: none; /* 设置不可选择文本 */
             }
 
             .tm_ui-tooltip-text {
@@ -588,11 +591,11 @@
                 margin-bottom: 3px;
                 padding: 8px;
             }
-
+            
             #myResetButton {
                 flex: 1;
             }
-
+            
             #myGotoRepoButton {
                 flex: 3;
             }
@@ -605,13 +608,13 @@
                 align-items: center;
                 justify-content: center;
             }
-
+            
             .tm_ui-option-group-collapsed .collapse-icon {
                 transform: rotate(180deg);
             }
 
-            #myDownloadButton:hover, #myResetButton:hover {
-                transform: scale(1.05);
+            #myDownloadButton:hover, #myResetButton:hover, #myGotoRepoButton:hover {
+                transform: scale(1.02);
                 box-shadow: 0 1px 5px rgba(0,0,0,0.15);
             }
 
@@ -634,15 +637,12 @@
                 border: none;
                 font-size: 11px;
             }
-            #myGotoRepoButton:hover {
-                scale: 1.05;
-            }
             #myGotoRepoButton:active {
-                scale: 1;
+                transform: scale(1);
             }
             #myGotoRepoButton:hover .goto-repo-btn-icon {
                 fill: #ffff00;
-                scale: 1.05;
+                transform: scale(1.02);
                 rotate: 360deg;
                 filter: drop-shadow(0 0 5px rgba(255, 208, 0, 0.8))
                         drop-shadow(0 0 10px rgba(255, 208, 0, 0.6));
@@ -757,7 +757,7 @@
                     C22.602,0.567,25.338,0.567,26.285,2.486z"
                     ></path>
                 </svg>
-            `
+            `;
             this.gotoRepoButton.id = "myGotoRepoButton";
             buttonsContainer.appendChild(this.gotoRepoButton);
 
@@ -787,30 +787,31 @@
                 tooltip: "改用fetch，无法获取JS动态加载的内容",
             });
             this.addBoolOption({
-                id: "zipCategories",
-                label: "下载为压缩包",
-                defaultValue: true,
-                container: downloadGroup,
-            });
-            this.addBoolOption({
                 id: "addSerialNumber",
                 label: "批量下载时添加序号前缀",
                 defaultValue: true,
                 container: downloadGroup,
                 tooltip: '文件名会加入"No_"格式的序号前缀',
             });
-            this.addStringOption({
-                id: "customFileName",
-                label: "自定义文件名模板",
-                defaultValue: "{title}",
+            this.addBoolOption({
+                id: "zipCategories",
+                label: "下载为压缩包",
+                defaultValue: true,
                 container: downloadGroup,
-                tooltip: "可用变量：{title}、{date}、{author}",
+                constraints: {
+                    false: [{ id: "saveWebImages", value: false }],
+                },
             });
             this.addBoolOption({
                 id: "saveWebImages",
                 label: "将图片保存至本地",
                 defaultValue: true,
                 container: downloadGroup,
+                tooltip: "默认保存到MD文件同名文件夹",
+                constraints: {
+                    true: [{ id: "zipCategories", value: true }],
+                    false: [{ id: "saveAllImagesToAssets", value: false }],
+                },
             });
             this.addBoolOption({
                 id: "saveAllImagesToAssets",
@@ -818,6 +819,19 @@
                 defaultValue: true,
                 container: downloadGroup,
                 tooltip: "如不启用，则保存到MD文件同名文件夹",
+                constraints: {
+                    true: [
+                        { id: "zipCategories", value: true },
+                        { id: "saveWebImages", value: true },
+                    ],
+                },
+            });
+            this.addStringOption({
+                id: "customFileNamePattern",
+                label: "批量文件名模板",
+                defaultValue: "{no}_{title}",
+                container: downloadGroup,
+                tooltip: "可用变量：{title}、{author}、{index}、{no}（有前导0）",
             });
             this.addIntOption({
                 id: "maxConcurrentDownloads",
@@ -831,13 +845,16 @@
             });
 
             // 文章内容组
-            const contentGroup = this.createOptionGroup(container, "文章内容");
+            const contentGroup = this.createOptionGroup(container, "文章内容设置");
             this.addBoolOption({
                 id: "addArticleInfoInYaml",
                 label: "添加文章元信息",
                 defaultValue: false,
                 container: contentGroup,
                 tooltip: "以YAML格式添加，对于转Hexo博客比较有用",
+                constraints: {
+                    true: [{ id: "mergeArticleContent", value: false }],
+                },
             });
             this.addBoolOption({
                 id: "addArticleTitleToMarkdown",
@@ -882,13 +899,16 @@
             });
 
             // 批量文章处理组
-            const batchGroup = this.createOptionGroup(container, "合并文章处理");
+            const batchGroup = this.createOptionGroup(container, "合并文章设置");
             this.addBoolOption({
                 id: "mergeArticleContent",
-                label: "合并批量文章内容",
+                label: "启用合并文章",
                 defaultValue: false,
                 container: batchGroup,
                 tooltip: "将多篇文章保存为单个MD文件",
+                constraints: {
+                    true: [{ id: "addArticleInfoInYaml", value: false }],
+                },
             });
             this.addBoolOption({
                 id: "addSerialNumberToTitle",
@@ -1358,7 +1378,7 @@
 
             // 下载按钮点击事件
             this.downloadButton.addEventListener("click", async () => {
-                await this.downloadManager.runMain();
+                await this.runMain();
             });
 
             // 默认设置按钮点击事件
@@ -1507,119 +1527,123 @@
          * @param {function} onCancel - 取消回调
          */
         showConfirmDialog(message, onConfirm, onCancel) {
-            if (this.comfirmDialogActive) {
-                // 如果已有对话框在显示，加入队列
-                this.comfirmDialogQueue.push({ message, onConfirm, onCancel });
-                return;
-            }
-            this.comfirmDialogActive = true;
+            return new Promise((resolve) => {
+                if (this.confirmDialogActive) {
+                    // 如果已有对话框在显示，加入队列
+                    this.confirmDialogQueue.push({ message, onConfirm, onCancel });
+                    return;
+                }
+                this.confirmDialogActive = true;
 
-            // 创建遮罩层
-            const overlay = document.createElement("div");
-            overlay.style.position = "fixed";
-            overlay.style.top = "0";
-            overlay.style.left = "0";
-            overlay.style.width = "100vw";
-            overlay.style.height = "100vh";
-            overlay.style.background = "rgba(0,0,0,0.5)";
-            overlay.style.zIndex = "10000";
-            overlay.style.backdropFilter = "blur(2px)";
-            overlay.id = "tm_confirm_overlay";
+                // 创建遮罩层
+                const overlay = document.createElement("div");
+                overlay.style.position = "fixed";
+                overlay.style.top = "0";
+                overlay.style.left = "0";
+                overlay.style.width = "100vw";
+                overlay.style.height = "100vh";
+                overlay.style.background = "rgba(0,0,0,0.5)";
+                overlay.style.zIndex = "10000";
+                overlay.style.backdropFilter = "blur(10px)";
+                overlay.id = "tm_confirm_overlay";
 
-            // 创建对话框
-            const dialog = document.createElement("div");
-            dialog.style.position = "fixed";
-            dialog.style.top = "50%";
-            dialog.style.left = "50%";
-            dialog.style.transform = "translate(-50%, -50%)";
-            dialog.style.background = "#fff";
-            dialog.style.padding = "16px 20px";
-            dialog.style.borderRadius = "8px";
-            dialog.style.boxShadow = "0 3px 16px rgba(0,0,0,0.25)";
-            dialog.style.textAlign = "center";
-            dialog.style.minWidth = "280px";
-            dialog.style.maxWidth = "90vw";
-            dialog.style.wordBreak = "break-all";
-            dialog.style.fontSize = "13px";
+                // 创建对话框
+                const dialog = document.createElement("div");
+                dialog.style.position = "fixed";
+                dialog.style.top = "50%";
+                dialog.style.left = "50%";
+                dialog.style.transform = "translate(-50%, -50%)";
+                dialog.style.background = "#fff";
+                dialog.style.padding = "16px 20px";
+                dialog.style.borderRadius = "8px";
+                dialog.style.boxShadow = "0 3px 16px rgba(0,0,0,0.25)";
+                dialog.style.textAlign = "center";
+                dialog.style.minWidth = "280px";
+                dialog.style.maxWidth = "90vw";
+                dialog.style.wordBreak = "break-all";
+                dialog.style.fontSize = "13px";
 
-            // 提示文本
-            const msg = document.createElement("div");
-            msg.innerHTML = message.replace(/\n/g, "<br>");
-            msg.style.marginBottom = "15px";
-            msg.style.textAlign = "left"; // 向左对齐
-            msg.style.lineHeight = "1.5";
-            msg.style.color = "#333";
-            dialog.appendChild(msg);
+                // 提示文本
+                const msg = document.createElement("div");
+                msg.innerHTML = message.replaceAll(/\n/g, "<br>");
+                msg.style.marginBottom = "15px";
+                msg.style.textAlign = "left"; // 向左对齐
+                msg.style.lineHeight = "1.5";
+                msg.style.color = "#333";
+                dialog.appendChild(msg);
 
-            // 按钮容器
-            const btnBox = document.createElement("div");
-            btnBox.style.display = "flex";
-            btnBox.style.justifyContent = "center";
-            btnBox.style.gap = "12px";
+                // 按钮容器
+                const btnBox = document.createElement("div");
+                btnBox.style.display = "flex";
+                btnBox.style.justifyContent = "center";
+                btnBox.style.gap = "12px";
 
-            // 确认按钮
-            const okBtn = document.createElement("button");
-            okBtn.textContent = "确定";
-            okBtn.style.padding = "5px 16px";
-            okBtn.style.background = "linear-gradient(135deg, #12c2e9 0%, #c471ed 50%, #f64f59 100%)";
-            okBtn.style.color = "#fff";
-            okBtn.style.border = "none";
-            okBtn.style.borderRadius = "3px";
-            okBtn.style.cursor = "pointer";
-            okBtn.style.transition = "all 0.3s ease";
-            okBtn.style.fontWeight = "bold";
-            okBtn.style.fontSize = "12px";
-            okBtn.onmouseover = () => {
-                okBtn.style.transform = "scale(1.05)";
-                okBtn.style.boxShadow = "0 1px 5px rgba(0,0,0,0.15)";
-            };
-            okBtn.onmouseout = () => {
-                okBtn.style.transform = "scale(1)";
-                okBtn.style.boxShadow = "none";
-            };
-            okBtn.onclick = () => {
-                document.body.removeChild(overlay);
-                if (typeof onConfirm === "function") onConfirm();
-                this.processNextDialog();
-            };
+                // 确认按钮
+                const okBtn = document.createElement("button");
+                okBtn.textContent = "确定";
+                okBtn.style.padding = "5px 16px";
+                okBtn.style.background = "linear-gradient(135deg, #12c2e9 0%, #c471ed 50%, #f64f59 100%)";
+                okBtn.style.color = "#fff";
+                okBtn.style.border = "none";
+                okBtn.style.borderRadius = "3px";
+                okBtn.style.cursor = "pointer";
+                okBtn.style.transition = "all 0.3s ease";
+                okBtn.style.fontWeight = "bold";
+                okBtn.style.fontSize = "12px";
+                okBtn.onmouseover = () => {
+                    okBtn.style.transform = "scale(1.05)";
+                    okBtn.style.boxShadow = "0 1px 5px rgba(0,0,0,0.15)";
+                };
+                okBtn.onmouseout = () => {
+                    okBtn.style.transform = "scale(1)";
+                    okBtn.style.boxShadow = "none";
+                };
+                okBtn.onclick = () => {
+                    document.body.removeChild(overlay);
+                    if (typeof onConfirm === "function") onConfirm();
+                    this.processNextDialog();
+                    resolve();
+                };
 
-            // 取消按钮
-            const cancelBtn = document.createElement("button");
-            cancelBtn.textContent = "取消";
-            cancelBtn.style.padding = "5px 16px";
-            cancelBtn.style.background = "#f0f0f0";
-            cancelBtn.style.color = "#333";
-            cancelBtn.style.border = "none";
-            cancelBtn.style.borderRadius = "3px";
-            cancelBtn.style.cursor = "pointer";
-            cancelBtn.style.transition = "all 0.2s ease";
-            cancelBtn.style.fontSize = "12px";
-            cancelBtn.onmouseover = () => {
-                cancelBtn.style.background = "#e0e0e0";
-            };
-            cancelBtn.onmouseout = () => {
+                // 取消按钮
+                const cancelBtn = document.createElement("button");
+                cancelBtn.textContent = "取消";
+                cancelBtn.style.padding = "5px 16px";
                 cancelBtn.style.background = "#f0f0f0";
-            };
-            cancelBtn.onclick = () => {
-                document.body.removeChild(overlay);
-                if (typeof onCancel === "function") onCancel();
-                this.processNextDialog();
-            };
+                cancelBtn.style.color = "#333";
+                cancelBtn.style.border = "none";
+                cancelBtn.style.borderRadius = "3px";
+                cancelBtn.style.cursor = "pointer";
+                cancelBtn.style.transition = "all 0.2s ease";
+                cancelBtn.style.fontSize = "12px";
+                cancelBtn.onmouseover = () => {
+                    cancelBtn.style.background = "#e0e0e0";
+                };
+                cancelBtn.onmouseout = () => {
+                    cancelBtn.style.background = "#f0f0f0";
+                };
+                cancelBtn.onclick = () => {
+                    document.body.removeChild(overlay);
+                    if (typeof onCancel === "function") onCancel();
+                    this.processNextDialog();
+                    resolve();
+                };
 
-            btnBox.appendChild(cancelBtn);
-            btnBox.appendChild(okBtn);
-            dialog.appendChild(btnBox);
-            overlay.appendChild(dialog);
-            document.body.appendChild(overlay);
+                btnBox.appendChild(cancelBtn);
+                btnBox.appendChild(okBtn);
+                dialog.appendChild(btnBox);
+                overlay.appendChild(dialog);
+                document.body.appendChild(overlay);
+            });
         }
 
         /**
          * 处理队列中的下一个对话框
          */
         processNextDialog() {
-            this.comfirmDialogActive = false;
-            if (this.comfirmDialogQueue.length > 0) {
-                const nextDialog = this.comfirmDialogQueue.shift();
+            this.confirmDialogActive = false;
+            if (this.confirmDialogQueue.length > 0) {
+                const nextDialog = this.confirmDialogQueue.shift();
                 setTimeout(() => {
                     this.showConfirmDialog(nextDialog.message, nextDialog.onConfirm, nextDialog.onCancel);
                 }, 100);
@@ -1646,6 +1670,117 @@
                 document.getElementById("myInfoFloatTip").remove();
             }
         }
+
+        async mainErrorHandler(error) {
+            // 使用对话框
+            const now = new Date();
+            const timeStr = now
+                .toISOString()
+                .replace("T", " ")
+                .replace(/\.\d+Z$/, "");
+
+            const script_config = this.configManager.exportAll();
+
+            // More detailed error capturing with formatted stack trace
+            let errorDetails = "";
+            if (error instanceof Error) {
+                errorDetails += `name: ${error.name}\n`;
+                errorDetails += `message: ${error.message}\n`;
+
+                // Format stack trace to be more readable
+                if (error.stack) {
+                    errorDetails += "stack trace:\n";
+                    const stackLines = error.stack.split("\n");
+
+                    // Process each line of the stack trace
+                    stackLines.forEach((line) => {
+                        // Extract the relevant parts from each stack line
+                        const match = line.match(/([^@\s]+)@(.*?):(\d+):(\d+)/);
+                        if (match) {
+                            const [_, functionName, filePath, lineNum, colNum] = match;
+
+                            // Get just the filename from the path
+                            const fileName = filePath.split("/").pop().split("?")[0];
+
+                            // filename 里被编码为url的特殊字符需要解码，以便查看
+                            const decodedFileName = decodeURIComponent(fileName);
+
+                            // Add formatted line to error details
+                            errorDetails += `  → func:${functionName} (file:${decodedFileName}@line:${lineNum}@col:${colNum})\n`;
+                        } else {
+                            // For lines that don't match the pattern, include them as is
+                            errorDetails += `  ${line.trim()}\n`;
+                        }
+                    });
+                }
+
+                // Capture custom properties
+                for (const key in error) {
+                    if (
+                        Object.prototype.hasOwnProperty.call(error, key) &&
+                        key !== "stack" &&
+                        key !== "message" &&
+                        key !== "name"
+                    ) {
+                        errorDetails += `${key}: ${JSON.stringify(error[key])}\n`;
+                    }
+                }
+            } else if (typeof error === "object" && error !== null) {
+                errorDetails = JSON.stringify(error, null, 2);
+            } else {
+                errorDetails = String(error);
+            }
+            errorDetails = errorDetails.trim();
+
+            await this.showConfirmDialog(
+                `下载文章时出错！是否前往Github提交Issue以告知开发者进行修复？（您需要拥有Github账号）\n错误详情：\n${errorDetails}`,
+                () =>
+                    this.gotoGithubIssue(
+                        `[BUG] 下载失败 (${getCurrentPageType()}页面)`,
+                        `#### 时间\n\n${timeStr}\n\n#### 错误内容\n\n\`\`\`\n${errorDetails}\n\`\`\`\n\n#### 其他信息\n\n- URL：\`${
+                            window.location.href
+                        }\`\n- 脚本版本：\`${GM_info.script.version}\`\n- 脚本配置：\n\`\`\`json\n${JSON.stringify(
+                            script_config,
+                            null,
+                            4
+                        )}\n\`\`\`\n`
+                    ),
+                this.showFloatTip("感谢您的反馈！", 2000),
+                () => {
+                    this.showFloatTip("已取消。", 2000);
+                    console.error("下载文章时出错：", error);
+                }
+            );
+        }
+
+        /**
+         * 主函数 - 下载文章入口
+         */
+        async runMain() {
+            this.disableFloatWindow();
+            const nowConfig = this.configManager.exportAll();
+            try {
+                switch (getCurrentPageType()) {
+                    case "unknown":
+                        alert("无法识别的页面。请确保在CSDN文章页面、专栏文章列表页面或用户全部文章列表页面。");
+                        break;
+                    case "article":
+                        await this.downloadManager.downloadSingleArticle(nowConfig);
+                        break;
+                    case "category":
+                        await this.downloadManager.downloadCategory(nowConfig);
+                        break;
+                    case "user_all_articles":
+                        await this.downloadManager.downloadUserAllArticles(nowConfig);
+                        break;
+                }
+            } catch (error) {
+                this.mainErrorHandler(error);
+            } finally {
+                this.enableFloatWindow();
+                this.downloadManager.reset(); // 重置FileManager
+            }
+        }
     }
 
     /**
@@ -1654,7 +1789,7 @@
      */
     class ConfigManager {
         constructor() {
-            this.configs = new Map();
+            this.configs = new Map(); // 仅用于存储key，实际值从GM_getValue获取
             this.defaults = new Map();
         }
 
@@ -1753,7 +1888,7 @@
          * @param {string} filename - 文件名
          * @param {number} index - 文件索引(用于排序)
          */
-        async saveTextAsFile(content, filename, index = 0) {
+        async addTextFile(content, filename, index = 0) {
             filename = Utils.safeFilename(filename);
             if (GM_getValue("zipCategories") || GM_getValue("mergeArticleContent")) {
                 // 保存到队列中，等待打包
@@ -1779,7 +1914,7 @@
          * @param {string} imgPrefix - 图片前缀
          * @returns {Promise<string>} 本地SVG路径
          */
-        async saveSvgToLocal(svgText, assetDirName, imgPrefix = "") {
+        async addSvgFile(svgText, assetDirName, imgPrefix = "") {
             // 检查参数是否合法
             if (typeof svgText !== "string") {
                 throw new Error("[saveSvgToLocal] Invalid argument: svgText must be a string.");
@@ -1823,7 +1958,7 @@
          * @param {string} imgPrefix - 图片前缀
          * @returns {Promise<string>} 本地图片路径
          */
-        async saveWebImageToLocal(imgUrl, assetDirName, imgPrefix = "") {
+        async addWebImageFile(imgUrl, assetDirName, imgPrefix = "") {
             // 检查参数是否合法
             if (typeof imgUrl !== "string") {
                 throw new Error("[saveWebImageToLocal] Invalid argument: imgUrl must be a string.");
@@ -1863,7 +1998,7 @@
 
             // 获取图片的Blob对象
             // const blob = await this.fetchImageAsBlob(imgUrl);
-            const blob = this.fetchImageAsBlob(imgUrl); // Promise返回的Blob对象，需要等到打包时进行等待
+            const blob = this.fetchImageBlob(imgUrl); // Promise返回的Blob对象，需要等到打包时进行等待
 
             // 添加到文件队列
             this.fileQueue.push({ filename, content: blob, type: blob.type, index });
@@ -1878,7 +2013,7 @@
          * @param {number} retryCount - 重试次数，默认值为3
          * @returns {Promise<Blob>} 资源Blob对象
          */
-        async fetchImageAsBlob(url, retryCount = 3) {
+        async fetchImageBlob(url, retryCount = 3) {
             return new Promise((resolve, reject) => {
                 function attemptFetch(remaining) {
                     GM_xmlhttpRequest({
@@ -1911,10 +2046,10 @@
 
         /**
          * 合并文章内容
-         * @param {string} mergeName - 合并后的文件名
-         * @param {string} extraPrefix - 额外前缀
+         * @param {string} outputFileName - 合并后的文件名
+         * @param {string} extraTopContent - 额外的顶部内容
          */
-        mergeArticleContent(mergeName, extraPrefix = "") {
+        mergeTextFile(outputFileName, extraTopContent = "") {
             // 检查队列是否只有一个md文件
             let mdCount = 0;
             this.fileQueue.forEach((file) => {
@@ -1942,9 +2077,9 @@
             const mergedContent = textArray.map((item) => item.content).join("\n\n\n\n");
 
             newFileQueue.push({
-                filename: `${mergeName}.md`,
+                filename: `${outputFileName}.md`,
                 type: "text/plain",
-                content: `${extraPrefix}${mergedContent}`,
+                content: `${extraTopContent}${mergedContent}`,
             });
             this.fileQueue = newFileQueue;
         }
@@ -2035,7 +2170,7 @@
          * 将文件队列打包为ZIP下载
          * @param {string} zipName - ZIP文件名
          */
-        async saveAllFileToZip(zipName, progressCallback = null, finalCallback = null) {
+        async zipAllFilesInQueue(zipName, progressCallback = null, finalCallback = null) {
             if (this.fileQueue.length === 0) {
                 console.error("没有文件需要保存");
                 return;
@@ -2116,17 +2251,56 @@
                 );
             }
 
-            // 创建下载链接
-            const url = URL.createObjectURL(zipBlob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `${zipName}.zip`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            this.clearFileQueue(); // 清空文件队列
-            this.clearImageCache(); // 清空图片缓存
+            this.reset(); // 清空文件队列
+
+            this.fileQueue.push({
+                filename: `${zipName}.zip`,
+                type: "application/zip",
+                content: zipBlob,
+            });
+        }
+
+        /**
+         * 下载队列里的全部文件
+         */
+        async downloadAllFilesInQueue() {
+            if (this.fileQueue.length === 0) {
+                console.warn("没有文件需要下载");
+                return;
+            }
+
+            for (let i = 0; i < this.fileQueue.length; i++) {
+                const file = this.fileQueue[i];
+                let content = file.content;
+
+                // 如果content是Promise，等待其完成
+                if (content instanceof Promise) {
+                    try {
+                        content = await content;
+                    } catch (error) {
+                        console.error(`下载文件 ${file.filename} 失败:`, error);
+                        continue;
+                    }
+                }
+
+                // 创建Blob对象
+                const blob = content instanceof Blob ? content : new Blob([content], { type: file.type });
+
+                // 创建下载链接
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = file.filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                // 添加小延迟避免浏览器阻止多文件下载
+                await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+
+            this.clearFileQueue();
         }
 
         /**
@@ -2147,7 +2321,7 @@
         /**
          * 重置FileManager
          */
-        async reset() {
+        reset() {
             this.clearFileQueue();
             this.clearImageCache();
         }
@@ -2219,6 +2393,15 @@
             this.CONSTANT_DOUBLE_NEW_LINE = "<|CSDN2MD@CONSTANT_DOUBLE_NEW_LINE@23hy7b|>";
             // 分隔符用于美化，比如公式和文本之间加上空格会更美观
             this.SEPARATION_BEAUTIFICATION = "<|CSDN2MD@SEPARATION_BEAUTIFICATION@2caev2|>";
+
+            this.DDNL = this.escapeRegExp(this.CONSTANT_DOUBLE_NEW_LINE);
+            this.SEPB = this.escapeRegExp(this.SEPARATION_BEAUTIFICATION);
+
+            // 1. 连续的 "\n" 与 CONSTANT_DOUBLE_NEW_LINE 替换为 "\n\n"
+            this.RE_DOUBLE_NL = new RegExp(`(?:\\n|${this.DDNL})*${this.DDNL}(?:\\n|${this.DDNL})*`, "g");
+            // 2. 连续的 SEPARATION_BEAUTIFICATION 替换为 " "，但如果前面是换行符，替换为 ""
+            this.RE_SEP_NOLINE = new RegExp(`(?<!\\n)(?:${this.SEPB})+`, "g");
+            this.RE_SEP_WITHNL = new RegExp(`(\\n)(?:${this.SEPB})+`, "g");
 
             // 节点类型常量
             this.ELEMENT_NODE = 1;
@@ -2326,7 +2509,7 @@
          * @returns {string} 转义后的字符串
          */
         escapeRegExp(s) {
-            return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            return s.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
         }
 
         /**
@@ -2335,8 +2518,7 @@
          * @returns {string} 修剪后的字符串
          */
         specialTrim(text = "") {
-            const SEPB = this.escapeRegExp(this.SEPARATION_BEAUTIFICATION);
-            return text.replace(new RegExp(`^(?:${SEPB}|\\s)+`), "").replace(new RegExp(`(?:${SEPB}|\\s)+$`), "");
+            return text.replace(new RegExp(`^(?:${this.SEPB}|\\s)+`), "").replace(new RegExp(`(?:${this.SEPB}|\\s)+$`), "");
         }
 
         /**
@@ -2345,19 +2527,10 @@
          * @returns {string} 处理后的Markdown内容
          */
         postProcessMarkdown(markdown) {
-            const DDNL = this.escapeRegExp(this.CONSTANT_DOUBLE_NEW_LINE);
-            const SEPB = this.escapeRegExp(this.SEPARATION_BEAUTIFICATION);
-
-            // 1. 连续的 "\n" 与 CONSTANT_DOUBLE_NEW_LINE 替换为 "\n\n"
-            const RE_DOUBLE_NL = new RegExp(`(?:\\n|${DDNL})*${DDNL}(?:\\n|${DDNL})*`, "g");
-            // 2. 连续的 SEPARATION_BEAUTIFICATION 替换为 " "，但如果前面是换行符，替换为 ""
-            const RE_SEP_NOLINE = new RegExp(`(?<!\\n)(?:${SEPB})+`, "g");
-            const RE_SEP_WITHNL = new RegExp(`(\\n)(?:${SEPB})+`, "g");
-
             return markdown
-                .replaceAll(RE_DOUBLE_NL, "\n\n") // 吃掉前后重复换行和标记，统一为两个换行
-                .replaceAll(RE_SEP_NOLINE, " ") // 非换行前的标记串 → 空格
-                .replaceAll(RE_SEP_WITHNL, "$1"); // 换行后的标记串 → 保留换行
+                .replaceAll(this.RE_DOUBLE_NL, "\n\n") // 吃掉前后重复换行和标记，统一为两个换行
+                .replaceAll(this.RE_SEP_NOLINE, " ") // 非换行前的标记串 → 空格
+                .replaceAll(this.RE_SEP_WITHNL, "$1"); // 换行后的标记串 → 保留换行
         }
 
         /****************************************
@@ -2498,7 +2671,7 @@
             // 适配旧版CSDN的 "OLE_LINK{xxx}" 链接
             const name = node.getAttribute("name") || "";
             if (name.startsWith("OLE_LINK")) {
-                text = text.replace("\n", "");
+                text = text.replaceAll("\n", "");
             }
 
             // 如果链接和文本都为空，则返回空字符串
@@ -2530,7 +2703,7 @@
 
                 // 保存网络图片到本地（如果配置启用）
                 if (context.saveWebImages) {
-                    src = await this.fileManager.saveWebImageToLocal(src, context.assetDirName, context.imgPrefix);
+                    src = await this.fileManager.addWebImageFile(src, context.assetDirName, context.imgPrefix);
                 }
 
                 // 处理图片尺寸
@@ -2576,9 +2749,7 @@
                 let childText = await this.processChildren(child, newContext);
 
                 // 处理嵌套列表的换行和缩进
-                const DDNL = this.escapeRegExp(this.CONSTANT_DOUBLE_NEW_LINE);
-                const RE_DOUBLE_NL = new RegExp(`(?:\\n|${DDNL})*${DDNL}(?:\\n|${DDNL})*`, "g");
-                childText = childText.replace(RE_DOUBLE_NL, "\n\n");
+                childText = childText.replaceAll(this.RE_DOUBLE_NL, "\n\n");
 
                 // 对除第一行外的所有行添加缩进
                 childText = childText
@@ -2681,13 +2852,11 @@
 
             // 处理表头
             const headerCells = Array.from(rows[0].querySelectorAll("th, td"));
-            const DDNL = this.escapeRegExp(this.CONSTANT_DOUBLE_NEW_LINE);
-            const RE_DOUBLE_NL = new RegExp(`(?:\\n|${DDNL})*${DDNL}(?:\\n|${DDNL})*`, "g");
 
             const headers = await Promise.all(
                 headerCells.map(async (cell) => {
                     const content = await this.processNode(cell, context);
-                    return content.trim().replaceAll(RE_DOUBLE_NL, "<br />");
+                    return content.trim().replaceAll(this.RE_DOUBLE_NL, "<br />");
                 })
             );
 
@@ -2710,7 +2879,7 @@
                 const rowContent = await Promise.all(
                     cells.map(async (cell) => {
                         const content = await this.processNode(cell, context);
-                        return content.trim().replaceAll(RE_DOUBLE_NL, "<br />");
+                        return content.trim().replaceAll(this.RE_DOUBLE_NL, "<br />");
                     })
                 );
 
@@ -2892,7 +3061,7 @@
 
             // 保存SVG图像
             if (context.saveWebImages) {
-                const svgSavePath = await this.fileManager.saveSvgToLocal(
+                const svgSavePath = await this.fileManager.addSvgFile(
                     node.outerHTML,
                     context.assetDirName,
                     context.imgPrefix
@@ -2968,7 +3137,7 @@
         async handleCenter(node, context) {
             if (node.childNodes.length === 1 && node.childNodes[0].nodeType === this.TEXT_NODE) {
                 // 只有一个文本子节点时，使用center标签
-                return `<center>${node.textContent.trim().replace("\n", "<br>")}</center>\n\n`;
+                return `<center>${node.textContent.trim().replaceAll("\n", "<br>")}</center>\n\n`;
             } else {
                 // 处理含有图片的居中标签，为图片添加#pic_center后缀
                 this.addPicCenterToImages(node);
@@ -3050,95 +3219,164 @@
      */
     class ArticleDownloader {
         /**
-         * @param {FileManager} fileManager
-         * @param {MarkdownConverter} markdownConverter
-         * @param {UIManager} uiManager
+         * @param {UIManager} [uiManager=null] - UI管理器实例
          */
-        constructor(fileManager, markdownConverter, uiManager) {
+        constructor(uiManager = null) {
             /** @type {FileManager} */
-            this.fileManager = fileManager;
+            this.fileManager = new FileManager();
             /** @type {MarkdownConverter} */
-            this.markdownConverter = markdownConverter;
+            this.markdownConverter = new MarkdownConverter(this.fileManager);
             /** @type {UIManager} */
             this.uiManager = uiManager;
         }
 
         /**
+         * 设置UI管理器
+         * @param {UIManager} uiManager - UI管理器实例
+         **/
+        setUIManager(uiManager) {
+            this.uiManager = uiManager;
+        }
+
+        reset() {
+            this.fileManager.reset();
+        }
+
+        async unfoldHideArticleBox(document_body) {
+            // 展开隐藏的文章内容
+            const hideArticleBox = document_body.querySelector(".hide-article-box");
+            if (!hideArticleBox) return;
+
+            const readAllContentBtn = hideArticleBox.querySelector(".read-all-content-btn");
+            if (!readAllContentBtn) return;
+
+            readAllContentBtn.click();
+            console.dir("已展开隐藏的文章内容。");
+
+            // 动态等待 #article_content 加载完成
+            const articleContent = document_body.querySelector("#article_content");
+            if (!articleContent) {
+                throw new Error("未找到文章内容元素 #article_content");
+            }
+
+            // 创建动态等待函数
+            const waitForContentStable = (element, timeout = 30000, stabilityDelay = 1000) => {
+                return new Promise((resolve, reject) => {
+                    let stabilityTimer = null;
+                    let timeoutTimer = null;
+                    const observer = new MutationObserver(() => {
+                        if (timeoutTimer) {
+                            clearTimeout(timeoutTimer);
+                            timeoutTimer = null; // 清除超时计时器
+                        }
+                        if (stabilityTimer) clearTimeout(stabilityTimer);
+                        stabilityTimer = setTimeout(resolve, stabilityDelay); // 重置稳定倒计时
+                    });
+                    observer.observe(element, {
+                        childList: true, // 监听子元素变化
+                        subtree: true, // 监听所有后代
+                        attributes: true, // 监听属性变化
+                    });
+                    // 设置超时强制返回
+                    setTimeout(() => {
+                        observer.disconnect();
+                        reject(new Error(`等待加载超时 (${timeout}ms)`));
+                    }, timeout);
+                });
+            };
+            await waitForContentStable(articleContent);
+            console.dir("内容展开完成");
+        }
+
+        /**
          * 解析网页并转换为Markdown格式
          * @param {Document} doc_body - 文章的body元素
-         * @param {boolean} getZip - 是否下载为ZIP
-         * @param {string} url - 文章URL
-         * @param {string} prefix - 文件前缀
+         * @param {Object} config - 配置选项
+         * @param {string} config.articleUrl - 文章链接
+         * @param {number} config.fileIndex - 文件索引（用于批量下载）
+         * @param {number} config.fileTotal - 文件总数（用于批量下载）
+         * @param {boolean} config.mergeArticleContent - 是否合并文章内容
+         * @param {boolean} config.saveAllImagesToAssets - 是否将所有图片保存
+         * @param {boolean} config.addSerialNumber - 是否添加序号
+         * @param {boolean} config.addSerialNumberToTitle - 是否在标题前添加序号
+         * @param {boolean} config.addArticleInfoInBlockquote - 是否在引用块中添加文章信息
+         * @param {boolean} config.addArticleTitleToMarkdown - 是否在Markdown中添加文章标题
+         * @param {boolean} config.addArticleInfoInYaml - 是否在YAML中添加文章信息
+         * @param {boolean} config.saveWebImages - 是否保存网络图片
+         * @param {boolean} config.forceImageCentering - 是否强制图片居中
+         * @param {boolean} config.enableImageSize - 是否启用图片尺寸
+         * @param {boolean} config.enableColorText - 是否启用彩色文本
+         * @param {boolean} config.removeCSDNSearchLink - 是否移除CSDN搜索链接
+         * @param {string} config.customFileNamePattern - 是否使用自定义文件名模式
+         * @returns {Promise<string>} 解析后的文章标题
+         * @throws {Error} 如果未找到文章内容
          */
-        async parseArticle(doc_body, getZip = false, url = "", prefix = "") {
+        async parseArticle(doc_body, config = {}) {
+            const {
+                articleUrl = "",
+                fileIndex = 0,
+                fileTotal = 1,
+                mergeArticleContent = false,
+                saveAllImagesToAssets = true,
+                addSerialNumberToTitle = false,
+                addArticleInfoInBlockquote = false,
+                addArticleTitleToMarkdown = true,
+                addArticleInfoInYaml = true,
+                saveWebImages = true,
+                forceImageCentering = false,
+                enableImageSize = true,
+                enableColorText = true,
+                removeCSDNSearchLink = true,
+                customFileNamePattern = "",
+            } = config;
+
             await this.unfoldHideArticleBox(doc_body);
             const articleTitle = doc_body.querySelector("#articleContentId")?.textContent.trim() || "未命名文章";
+            const articleAuthor = doc_body.querySelector("#uid").textContent.trim() || "";
             const articleInfo =
                 doc_body
                     .querySelector(".bar-content")
                     ?.textContent.replace(/\s{2,}/g, " ")
                     .trim() || "";
             const htmlInput = doc_body.querySelector("#content_views");
-            if (!htmlInput) {
-                alert("未找到文章内容。");
-                return;
+            if (!htmlInput) throw new Error("未找到文章内容。请检查网页结构是否发生变化。");
+
+            const padNo = `${String(fileIndex).padStart(fileTotal.toString().length, "0")}`;
+            let fileName = articleTitle;
+            if (fileIndex > 0) {
+                fileName = customFileNamePattern
+                    .replaceAll("{no}", padNo)
+                    .replaceAll("{title}", articleTitle)
+                    .replaceAll("{author}", articleAuthor)
+                    .replaceAll("{index}", fileIndex.toString())
             }
 
-            let mode = GM_getValue("parallelDownload") ? "并行" : "串行";
-            mode += GM_getValue("fastDownload") ? "快速" : "完整";
-            this.uiManager.showFloatTip(`正在以${mode}模式解析文章：` + articleTitle);
-
-            if (url === "") {
-                url = window.location.href;
-            }
-            url = Utils.clearUrl(url);
-
-            // let markdown = await this.markdownConverter.htmlToMarkdown(
-            //     htmlInput,
-            //     GM_getValue("mergeArticleContent") || GM_getValue("saveAllImagesToAssets")
-            //         ? "assets"
-            //         : GM_getValue("addSerialNumber")
-            //         ? `${prefix}${articleTitle}`
-            //         : `${articleTitle}`,
-            //     !GM_getValue("mergeArticleContent"),
-            //     GM_getValue("mergeArticleContent") || GM_getValue("saveAllImagesToAssets") ? prefix : ""
-            // );
-
+            this.uiManager.showFloatTip(`正在解析文章：` + articleTitle);
             let markdown = await this.markdownConverter.htmlToMarkdown(htmlInput, {
-                assetDirName: (() => {
-                    if (GM_getValue("mergeArticleContent") || GM_getValue("saveAllImagesToAssets")) {
-                        return "assets";
-                    } else if (GM_getValue("addSerialNumber")) {
-                        return `${prefix}${articleTitle}`;
-                    } else {
-                        return `${articleTitle}`;
-                    }
-                })(),
-                enableTOC: !GM_getValue("mergeArticleContent"),
-                imgPrefix: GM_getValue("mergeArticleContent") || GM_getValue("saveAllImagesToAssets") ? prefix : "",
-                saveWebImages: GM_getValue("saveWebImages"),
-                forceImageCentering: GM_getValue("forceImageCentering"),
-                enableImageSize: GM_getValue("enableImageSize"),
-                enableColorText: GM_getValue("enableColorText"),
-                removeCSDNSearchLink: GM_getValue("removeCSDNSearchLink"),
+                assetDirName: mergeArticleContent || saveAllImagesToAssets ? "assets" : fileName,
+                enableTOC: !mergeArticleContent,
+                imgPrefix: `${padNo}_`,
+                saveWebImages: saveWebImages,
+                forceImageCentering: forceImageCentering,
+                enableImageSize: enableImageSize,
+                enableColorText: enableColorText,
+                removeCSDNSearchLink: removeCSDNSearchLink,
             });
 
-            if (GM_getValue("addArticleInfoInBlockquote")) {
-                markdown = `> ${articleInfo}\n> 文章链接：${url}\n\n${markdown}`;
+            if (addArticleInfoInBlockquote) {
+                markdown = `> ${articleInfo}\n> 文章链接：${Utils.clearUrl(articleUrl)}\n\n${markdown}`;
             }
-
-            if (GM_getValue("addArticleTitleToMarkdown")) {
-                if (GM_getValue("addSerialNumberToTitle")) {
-                    markdown = `# ${prefix}${articleTitle}\n\n${markdown}`;
+            if (addArticleTitleToMarkdown) {
+                if (addSerialNumberToTitle) {
+                    markdown = `# ${padNo} ${articleTitle}\n\n${markdown}`;
                 } else {
                     markdown = `# ${articleTitle}\n\n${markdown}`;
                 }
             }
-
-            if (GM_getValue("addArticleInfoInYaml")) {
+            if (addArticleInfoInYaml) {
                 const article_info_box = doc_body.querySelector(".article-info-box");
                 // 文章标题
-                const meta_title = GM_getValue("addSerialNumberToTitle") ? `${prefix}${articleTitle}` : articleTitle;
+                const meta_title = addSerialNumberToTitle ? `${padNo} ${articleTitle}` : articleTitle;
                 // 文章日期 YYYY-MM-DD HH:MM:SS
                 const meta_date =
                     article_info_box
@@ -3160,36 +3398,18 @@
                 markdown = `---\n${articleMeta}---\n\n${markdown}`;
             }
 
-            // 从prefix中获取序号
-            let index = 0;
-            if (prefix !== "" && prefix.endsWith("_")) {
-                index = Number(prefix.slice(0, -1));
-            }
-            // 如果是批量下载，则需要添加序号
-            const saveFileName = GM_getValue("addSerialNumber") ? `${prefix}${articleTitle}.md` : `${articleTitle}.md`;
-            await this.fileManager.saveTextAsFile(markdown, saveFileName, index);
+            await this.fileManager.addTextFile(markdown, `${fileName}.md`, fileIndex);
 
-            if (getZip) {
-                await this.fileManager.saveAllFileToZip(
-                    `${prefix}${articleTitle}`,
-                    (info_string) => {
-                        this.uiManager.showFloatTip(info_string);
-                    },
-                    (info_string) => {
-                        this.uiManager.enableFloatWindow();
-                        this.uiManager.showFloatTip(info_string, 3000);
-                    }
-                );
-            }
+            return articleTitle;
         }
 
         /**
          * 在iframe中下载文章
          * @param {string} url - 文章URL
-         * @param {string} prefix - 文件前缀
+         * @param {object} config - 配置选项
          * @returns {Promise<void>}
          */
-        async downloadArticleInIframe(url, prefix = "") {
+        async downloadArticleInIframe(url, config = {}) {
             return new Promise((resolve, reject) => {
                 const originalUrl = url; // 保存原始URL
                 let isRedirected = false; // 重置重定向标志
@@ -3230,17 +3450,17 @@
 
                             // 检查是否有验证码
                             if (hasCaptcha(doc)) {
-                                console.dir(`(downloadArticleInIframe) 检测到验证码： Url: ${url}`);
-                                this.uiManager.showConfirmDialog(
-                                    `(downloadArticleInIframe) 检测到验证码，您需要手动验证通过后，再刷新页面重新进行下载。\n点击确认将显示该验证页面，若取消则无法下载。\nUrl: ${url}`,
+                                console.dir(`检测到验证码： Url: ${url}`);
+                                await this.uiManager.showConfirmDialog(
+                                    `检测到验证码，您需要手动验证通过后，再刷新页面重新进行下载。\n点击确认将显示该验证页面，若取消则无法下载。\nUrl: ${url}`,
                                     async () => {
                                         // 用户点击确认后，重新加载iframe
-                                        console.dir(`(downloadArticleInIframe) 用户确认验证码处理： Url: ${url}`);
+                                        console.dir(`用户确认验证码处理： Url: ${url}`);
                                         showIframe(iframe);
                                     },
                                     () => {
                                         // 用户点击取消后，移除iframe并拒绝Promise
-                                        console.dir(`(downloadArticleInIframe) 用户取消验证码处理： Url: ${url}`);
+                                        console.dir(`用户取消验证码处理： Url: ${url}`);
                                         document.body.removeChild(iframe);
                                     }
                                 );
@@ -3248,7 +3468,10 @@
                             }
 
                             // 调用解析函数
-                            await this.parseArticle(doc.body, false, url, prefix);
+                            await this.parseArticle(doc.body, {
+                                ...config, // 传入其他配置选项
+                                articleUrl: url,
+                            });
                             // 移除iframe
                             document.body.removeChild(iframe);
                             resolve();
@@ -3256,12 +3479,12 @@
                             // 在发生错误时移除iframe并拒绝Promise
                             document.body.removeChild(iframe);
                             console.dir(
-                                `(downloadArticleInIframe) 解析文章时出错： Url: ${url} OriginalUrl: ${originalUrl} Redirected: ${isRedirected}. Original error: ${
+                                `解析文章时出错： Url: ${url} OriginalUrl: ${originalUrl} Redirected: ${isRedirected}. Original error: ${
                                     error.message || error
                                 }`
                             );
                             const newError = new Error(
-                                `(downloadArticleInIframe) 解析文章时出错：Url: ${url} OriginalUrl: ${originalUrl} Redirected: ${isRedirected}. Original error: ${
+                                `解析文章时出错：Url: ${url} OriginalUrl: ${originalUrl} Redirected: ${isRedirected}. Original error: ${
                                     error.message || error
                                 }`
                             );
@@ -3274,12 +3497,12 @@
                     iframe.onerror = (error) => {
                         document.body.removeChild(iframe);
                         console.dir(
-                            `(downloadArticleInIframe) Iframe加载失败： Url: ${url} OriginalUrl: ${originalUrl} Redirected: ${isRedirected}. Original error: ${
+                            `Iframe加载失败： Url: ${url} OriginalUrl: ${originalUrl} Redirected: ${isRedirected}. Original error: ${
                                 error.message || error
                             }`
                         );
                         const newError = new Error(
-                            `(downloadArticleInIframe) Iframe加载失败：Url: ${url} OriginalUrl: ${originalUrl} Redirected: ${isRedirected}. Original error: ${
+                            `Iframe加载失败：Url: ${url} OriginalUrl: ${originalUrl} Redirected: ${isRedirected}. Original error: ${
                                 error.message || error
                             }`
                         );
@@ -3297,42 +3520,43 @@
                     method: "HEAD",
                     url: url,
                     redirect: "manual", // 禁止自动重定向
-                    onload: function (response) {
+                    onload: async function (response) {
                         if (response.status === 301 || response.status === 302) {
                             const redirectUrl = response.responseHeaders.match(/Location:\s*(.+)/i)?.[1];
-                            console.dir(`(downloadArticleInIframe) 检测到重定向: ${url} -> ${redirectUrl}`);
+                            console.dir(`检测到重定向: ${url} -> ${redirectUrl}`);
                             isRedirected = true; // 设置重定向标志
                             // 将 http 替换为 https
                             url = redirectUrl.replace(/^http:\/\//, "https://");
                         } else if (response.status !== 200) {
-                            console.dir(
-                                `(downloadArticleInIframe) 文章页面状态码异常：Url: ${url} Response Status: ${response.status}`
-                            );
+                            console.dir(`文章页面状态码异常：Url: ${url} Response Status: ${response.status}`);
                             if (response.status === 521) {
                                 uiManager.showFloatTip(
-                                    `(downloadArticleInIframe) 检查文章 ${url} 时状态码异常：${response.status}，有下载失败的可能性。`
+                                    `检查文章 ${url} 时状态码异常：${response.status}，有下载失败的可能性。`
                                 );
                             } else {
-                                const newError = new Error(
-                                    `(downloadArticleInIframe) 文章页面状态码异常：Url: ${url} Response Status: ${response.status}`
+                                await uiManager.showConfirmDialog(
+                                    `检查文章 ${url} 时状态码异常：${response.status}，是否继续下载？\n（这里只是用HEAD方法预先检查了一下，也许下载时会成功）`,
+                                    () => {
+                                        // 用户点击确认后，继续下载
+                                        console.dir(`用户确认继续下载： Url: ${url}`);
+                                    },
+                                    () => {
+                                        const newError = new Error(
+                                            `文章页面状态码异常：Url: ${url} Response Status: ${response.status}`
+                                        );
+                                        reject(newError);
+                                    }
                                 );
-                                reject(newError);
                             }
                         } else {
-                            console.dir(`(downloadArticleInIframe) 文章页面加载成功：${url}`);
+                            console.dir(`文章页面检查成功：${url}`);
                         }
                         onCheckPassed(); // 检测通过，开始下载
                     },
                     onerror: function (error) {
-                        console.dir(
-                            `(downloadArticleInIframe) 无法加载文章页面： Url: ${url}. Original error: ${
-                                error.message || error
-                            }`
-                        );
+                        console.dir(`检查文章页面失败： Url: ${url}. Original error: ${error.message || error}`);
                         const newError = new Error(
-                            `(downloadArticleInIframe) 无法加载文章页面：Url: ${url}. Original error: ${
-                                error.message || error
-                            }`
+                            `检查文章页面失败：Url: ${url}. Original error: ${error.message || error}`
                         );
                         newError.stack = error.stack;
                         reject(error);
@@ -3344,25 +3568,55 @@
         /**
          * 从URL批量下载文章
          * @param {string} url - 文章URL
-         * @param {string} prefix - 文件前缀
+         * @param {number} index - 文件前缀
+         * @param {Object} config - 配置选项
+         * @param {boolean} config.fastDownload - 是否快速下载
+         * @return {Promise<void>}
+         * @throws {Error} 如果下载失败或解析文章时出错
          */
-        async downloadArticleFromURL(url, prefix = "") {
-            if (GM_getValue("fastDownload")) {
+        async downloadOneArticleFromBatch(url, index, total, config = {}) {
+            const newConfig = {
+                ...config, // 传入其他配置选项
+                articleUrl: url,
+                fileIndex: index,
+                fileTotal: total,
+            };
+            if (config.fastDownload) {
                 const response = await fetch(url);
                 const text = await response.text();
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(text, "text/html");
                 // 调用解析函数
-                await this.parseArticle(doc.body, false, url, prefix);
+                await this.parseArticle(doc.body, newConfig);
             } else {
-                await this.downloadArticleInIframe(url, prefix);
+                await this.downloadArticleInIframe(url, newConfig);
             }
         }
 
         /**
          * 下载专栏的全部文章为Markdown格式
-         */
-        async downloadCategory() {
+         * @param {Object} config - 配置选项
+         * @param {boolean} config.zipCategories - 是否将文章打包成zip
+         * @param {string} config.filePrefix - 文件名前缀
+         * @param {string} config.articleUrl - 文章链接
+         * @param {number} config.maxConcurrentDownloads - 最大并发下载数
+         * @param {boolean} config.parallelDownload - 是否并行下载
+         * @param {boolean} config.fastDownload - 是否快速下载
+         * @param {boolean} config.mergeArticleContent - 是否合并文章内容
+         * @param {boolean} config.saveAllImagesToAssets - 是否将所有图片保存
+         * @param {boolean} config.addSerialNumber - 是否添加序号
+         * @param {boolean} config.addSerialNumberToTitle - 是否在标题前添加序号
+         * @param {boolean} config.addArticleInfoInBlockquote - 是否在引用块中添加文章信息
+         * @param {boolean} config.addArticleTitleToMarkdown - 是否在Markdown中添加文章标题
+         * @param {boolean} config.addArticleInfoInYaml - 是否在YAML中添加文章信息
+         * @param {boolean} config.saveWebImages - 是否保存网络图片
+         * @param {boolean} config.forceImageCentering - 是否强制图片居中
+         * @param {boolean} config.enableImageSize - 是否启用图片尺寸
+         * @param {boolean} config.enableColorText - 是否启用彩色文本
+         * @param {boolean} config.removeCSDNSearchLink - 是否移除CSDN搜索链接
+         * @param {boolean} config.addArticleInfoInBlockquote_batch - 是否在批量下载时在引用块中添加文章信息
+         **/
+        async downloadCategory(config = {}) {
             // 获取专栏id，注意url可能是/category_数字.html或/category_数字_数字.html，需要第一个数字
             this.uiManager.showFloatTip("正在获取专栏的全部文章链接...");
             const base_url = window.location.href;
@@ -3479,79 +3733,75 @@
             }
 
             // 下载每篇文章
-            const prefixMaxLength = url_list.length.toString().length;
-            if (GM_getValue("parallelDownload")) {
-                // await Promise.all(
-                //     url_list.map((url, index) =>
-                //         this.downloadArticleFromURL(
-                //             url,
-                //             `${String(url_list.length - index).padStart(prefixMaxLength, "0")}_`
-                //         )
-                //     )
-                // );
-                await Utils.parallelPool(url_list, (url, index) =>
-                    this.downloadArticleFromURL(
-                        url,
-                        `${String(url_list.length - index).padStart(prefixMaxLength, "0")}_`
-                    )
-                );
-            } else {
-                for (let i = 0; i < url_list.length; i++) {
-                    await this.downloadArticleFromURL(
-                        url_list[i],
-                        `${String(url_list.length - i).padStart(prefixMaxLength, "0")}_`
-                    );
+            await Utils.parallelPool(
+                url_list,
+                (url, index) => this.downloadOneArticleFromBatch(url, url_list.length - index, url_list.length, config),
+                config.parallelDownload ? config.maxConcurrentDownloads : 1
+            );
+
+            if (config.mergeArticleContent) {
+                let extraTopContent = "";
+                if (config.addArticleTitleToMarkdown) {
+                    extraTopContent += `# ${document.title}\n\n`;
                 }
+                if (config.addArticleInfoInBlockquote_batch) {
+                    const batchTitle = document.body.querySelector(".column_title")?.textContent.trim() || "";
+                    const batchDesc = document.body.querySelector(".column_text_desc")?.textContent.trim() || "";
+                    const batchColumnData =
+                        document.body
+                            .querySelector(".column_data")
+                            ?.textContent.replace(/\s{2,}/g, " ")
+                            .trim() || "";
+                    const batchAuthor =
+                        document.body
+                            .querySelector(".column_person_tit")
+                            ?.textContent.replace(/\s{2,}/g, " ")
+                            .trim() || "";
+                    const batchUrl = Utils.clearUrl(base_url);
+                    extraTopContent += `> ${batchDesc}\n> ${batchAuthor} ${batchColumnData}\n${batchUrl}\n\n`;
+                }
+                this.fileManager.mergeTextFile(`${document.title}`, extraTopContent);
             }
 
-            let extraPrefix = "";
-            if (GM_getValue("addArticleTitleToMarkdown")) {
-                extraPrefix += `# ${document.title}\n\n`;
-            }
-            if (GM_getValue("addArticleInfoInBlockquote_batch")) {
-                const batchTitle = document.body.querySelector(".column_title")?.textContent.trim() || "";
-                const batchDesc = document.body.querySelector(".column_text_desc")?.textContent.trim() || "";
-                const batchColumnData =
-                    document.body
-                        .querySelector(".column_data")
-                        ?.textContent.replace(/\s{2,}/g, " ")
-                        .trim() || "";
-                const batchAuthor =
-                    document.body
-                        .querySelector(".column_person_tit")
-                        ?.textContent.replace(/\s{2,}/g, " ")
-                        .trim() || "";
-                const batchUrl = Utils.clearUrl(base_url);
-                extraPrefix += `> ${batchDesc}\n> ${batchAuthor} ${batchColumnData}\n${batchUrl}\n\n`;
-            }
-
-            if (GM_getValue("mergeArticleContent")) {
-                this.fileManager.mergeArticleContent(`${document.title}`, extraPrefix);
-            }
-
-            if (GM_getValue("zipCategories")) {
-                await this.fileManager.saveAllFileToZip(
+            if (config.zipCategories) {
+                await this.fileManager.zipAllFilesInQueue(
                     `${document.title}`,
                     (info_string) => {
                         this.uiManager.showFloatTip(info_string);
                     },
                     (info_string) => {
-                        this.uiManager.enableFloatWindow();
                         this.uiManager.showFloatTip(info_string, 3000);
                     }
                 );
-            } else {
-                if (GM_getValue("mergeArticleContent")) {
-                    this.fileManager.downloadMergedArticle();
-                }
-                this.uiManager.showFloatTip("专栏文章全部处理完毕，请等待下载结束。", 3000);
             }
+            await this.fileManager.downloadAllFilesInQueue();
+            this.uiManager.showFloatTip("专栏文章全部处理完毕，请等待下载结束。", 3000);
         }
 
         /**
          * 下载用户的全部文章为Markdown格式
-         */
-        async downloadUserAllArticles() {
+         * @param {Object} config - 配置选项
+         * @param {boolean} config.zipCategories - 是否将文章打包成zip
+         * @param {string} config.filePrefix - 文件名前缀
+         * @param {string} config.articleUrl - 文章链接
+         * @param {number} config.maxConcurrentDownloads - 最大并发下载数
+         * @param {boolean} config.parallelDownload - 是否并行下载
+         * @param {boolean} config.fastDownload - 是否快速下载
+         * @param {boolean} config.mergeArticleContent - 是否合并文章内容
+         * @param {boolean} config.saveAllImagesToAssets - 是否将所有图片保存
+         * @param {boolean} config.addSerialNumber - 是否添加序号
+         * @param {boolean} config.addSerialNumberToTitle - 是否在标题前添加序号
+         * @param {boolean} config.addArticleInfoInBlockquote - 是否在引用块中添加文章信息
+         * @param {boolean} config.addArticleTitleToMarkdown - 是否在Markdown中添加文章标题
+         * @param {boolean} config.addArticleInfoInYaml - 是否在YAML中添加文章信息
+         * @param {boolean} config.saveWebImages - 是否保存网络图片
+         * @param {boolean} config.forceImageCentering - 是否强制图片居中
+         * @param {boolean} config.enableImageSize - 是否启用图片尺寸
+         * @param {boolean} config.enableColorText - 是否启用彩色文本
+         * @param {boolean} config.removeCSDNSearchLink - 是否移除CSDN搜索链接
+         * @param {boolean} config.addArticleInfoInBlockquote_batch - 是否在批量下载时在引用块中添加文章信息
+         **/
+        async downloadUserAllArticles(config = {}) {
             const mainContent = document.body.querySelector(".mainContent");
             const url_list = [];
 
@@ -3721,230 +3971,78 @@
             }
 
             // 下载每篇文章
-            const prefixMaxLength = url_list.length.toString().length;
-            if (GM_getValue("parallelDownload")) {
-                // await Promise.all(
-                //     url_list.map((url, index) =>
-                //         this.downloadArticleFromURL(
-                //             url,
-                //             `${String(url_list.length - index).padStart(prefixMaxLength, "0")}_`
-                //         )
-                //     )
-                // );
-                await Utils.parallelPool(url_list, (url, index) =>
-                    this.downloadArticleFromURL(
-                        url,
-                        `${String(url_list.length - index).padStart(prefixMaxLength, "0")}_`
-                    )
-                );
-            } else {
-                for (let i = 0; i < url_list.length; i++) {
-                    await this.downloadArticleFromURL(
-                        url_list[i],
-                        `${String(url_list.length - i).padStart(prefixMaxLength, "0")}_`
-                    );
+            await Utils.parallelPool(
+                url_list,
+                (url, index) => this.downloadOneArticleFromBatch(url, url_list.length - index, url_list.length, config),
+                config.parallelDownload ? config.maxConcurrentDownloads : 1
+            );
+
+            if (config.mergeArticleContent) {
+                let extraTopContent = "";
+                if (config.addArticleTitleToMarkdown) {
+                    extraTopContent += `# ${document.title}\n\n`;
                 }
+                if (config.addArticleInfoInBlockquote_batch) {
+                    extraTopContent += `> ${Utils.clearUrl(window.location.href)}\n\n`;
+                }
+                this.fileManager.mergeTextFile(`${document.title}`, extraTopContent);
             }
-
-            let extraPrefix = "";
-            if (GM_getValue("addArticleTitleToMarkdown")) {
-                extraPrefix += `# ${document.title}\n\n`;
-            }
-            if (GM_getValue("addArticleInfoInBlockquote_batch")) {
-                const batchUrl = Utils.clearUrl(window.location.href);
-                extraPrefix += `> ${batchUrl}\n\n`;
-            }
-
-            if (GM_getValue("mergeArticleContent")) {
-                this.fileManager.mergeArticleContent(`${document.title}`, extraPrefix);
-            }
-
-            if (GM_getValue("zipCategories")) {
-                await this.fileManager.saveAllFileToZip(
+            if (config.zipCategories) {
+                await this.fileManager.zipAllFilesInQueue(
                     `${document.title}`,
                     (info_string) => {
                         this.uiManager.showFloatTip(info_string);
                     },
                     (info_string) => {
-                        this.uiManager.enableFloatWindow();
                         this.uiManager.showFloatTip(info_string, 3000);
                     }
                 );
-            } else {
-                if (GM_getValue("mergeArticleContent")) {
-                    this.fileManager.downloadMergedArticle();
-                }
-                this.uiManager.showFloatTip("用户全部文章处理完毕，请等待下载结束。", 3000);
             }
-        }
-
-        mainErrorHandler(error) {
-            // 使用对话框
-            const now = new Date();
-            const timeStr = now
-                .toISOString()
-                .replace("T", " ")
-                .replace(/\.\d+Z$/, "");
-
-            const script_config = {};
-            this.uiManager.optionCheckBoxList.forEach((optionElem) => {
-                script_config[optionElem.id.replace("Checkbox", "")] = optionElem.checked;
-            });
-
-            // More detailed error capturing with formatted stack trace
-            let errorDetails = "";
-            if (error instanceof Error) {
-                errorDetails += `name: ${error.name}\n`;
-                errorDetails += `message: ${error.message}\n`;
-
-                // Format stack trace to be more readable
-                if (error.stack) {
-                    errorDetails += "stack trace:\n";
-                    const stackLines = error.stack.split("\n");
-
-                    // Process each line of the stack trace
-                    stackLines.forEach((line) => {
-                        // Extract the relevant parts from each stack line
-                        const match = line.match(/([^@\s]+)@(.*?):(\d+):(\d+)/);
-                        if (match) {
-                            const [_, functionName, filePath, lineNum, colNum] = match;
-
-                            // Get just the filename from the path
-                            const fileName = filePath.split("/").pop().split("?")[0];
-
-                            // filename 里被编码为url的特殊字符需要解码，以便查看
-                            const decodedFileName = decodeURIComponent(fileName);
-
-                            // Add formatted line to error details
-                            errorDetails += `  → func:${functionName} (file:${decodedFileName}@line:${lineNum}@col:${colNum})\n`;
-                        } else {
-                            // For lines that don't match the pattern, include them as is
-                            errorDetails += `  ${line.trim()}\n`;
-                        }
-                    });
-                }
-
-                // Capture custom properties
-                for (const key in error) {
-                    if (
-                        Object.prototype.hasOwnProperty.call(error, key) &&
-                        key !== "stack" &&
-                        key !== "message" &&
-                        key !== "name"
-                    ) {
-                        errorDetails += `${key}: ${JSON.stringify(error[key])}\n`;
-                    }
-                }
-            } else if (typeof error === "object" && error !== null) {
-                errorDetails = JSON.stringify(error, null, 2);
-            } else {
-                errorDetails = String(error);
-            }
-            errorDetails = errorDetails.trim();
-
-            this.uiManager.showConfirmDialog(
-                `下载文章时出错！是否前往Github提交Issue以告知开发者进行修复？（您需要拥有Github账号）\n错误详情：\n${errorDetails}`,
-                () =>
-                    this.uiManager.gotoGithubIssue(
-                        `[BUG] 下载失败 (${getCurrentPageType()}页面)`,
-                        `#### 时间\n\n${timeStr}\n\n#### 错误内容\n\n\`\`\`\n${errorDetails}\n\`\`\`\n\n#### 其他信息\n\n- URL：\`${
-                            window.location.href
-                        }\`\n- 脚本版本：\`${GM_info.script.version}\`\n- 脚本配置：\n\`\`\`json\n${JSON.stringify(
-                            script_config,
-                            null,
-                            4
-                        )}\n\`\`\`\n`
-                    ),
-                this.uiManager.showFloatTip("感谢您的反馈！", 2000),
-                () => {
-                    this.uiManager.showFloatTip("已取消。", 2000);
-                    console.error("下载文章时出错：", error);
-                }
-            );
-        }
-
-        async unfoldHideArticleBox(document_body) {
-            // 展开隐藏的文章内容
-            const hideArticleBox = document_body.querySelector(".hide-article-box");
-            if (!hideArticleBox) return;
-
-            const readAllContentBtn = hideArticleBox.querySelector(".read-all-content-btn");
-            if (!readAllContentBtn) return;
-
-            readAllContentBtn.click();
-            console.dir("已展开隐藏的文章内容。");
-
-            // 动态等待 #article_content 加载完成
-            const articleContent = document_body.querySelector("#article_content");
-            if (!articleContent) {
-                throw new Error("未找到文章内容元素 #article_content");
-            }
-
-            // 创建动态等待函数
-            const waitForContentStable = (element, timeout = 30000, stabilityDelay = 1000) => {
-                return new Promise((resolve, reject) => {
-                    let stabilityTimer = null;
-                    let timeoutTimer = null;
-                    const observer = new MutationObserver(() => {
-                        if (timeoutTimer) {
-                            clearTimeout(timeoutTimer);
-                            timeoutTimer = null; // 清除超时计时器
-                        }
-                        if (stabilityTimer) clearTimeout(stabilityTimer);
-                        stabilityTimer = setTimeout(resolve, stabilityDelay); // 重置稳定倒计时
-                    });
-                    observer.observe(element, {
-                        childList: true, // 监听子元素变化
-                        subtree: true, // 监听所有后代
-                        attributes: true, // 监听属性变化
-                    });
-                    // 设置超时强制返回
-                    setTimeout(() => {
-                        observer.disconnect();
-                        reject(new Error(`等待加载超时 (${timeout}ms)`));
-                    }, timeout);
-                });
-            };
-            await waitForContentStable(articleContent);
-            console.dir("内容展开完成");
+            await this.fileManager.downloadAllFilesInQueue();
+            this.uiManager.showFloatTip("用户全部文章处理完毕，请等待下载结束。", 3000);
         }
 
         /**
-         * 主函数 - 下载文章入口
-         */
-        async runMain() {
-            this.uiManager.disableFloatWindow();
-            const url_type = getCurrentPageType();
-            try {
-                switch (url_type) {
-                    case "unknown":
-                        alert("无法识别的页面。请确保在CSDN文章页面、专栏文章列表页面或用户全部文章列表页面。");
-                        break;
-                    case "article":
-                        // 文章页面
-                        // 由于单篇文章无需合并，所以这里需要将mergeArticleContent设置为false
-                        const mergeArticleContentSetting = GM_getValue("mergeArticleContent");
-                        GM_setValue("mergeArticleContent", false);
-                        // 避免文章页面加载不完全导致解析失败
-                        await this.parseArticle(document.body, GM_getValue("zipCategories"), window.location.href, "");
-                        GM_setValue("mergeArticleContent", mergeArticleContentSetting);
-                        this.uiManager.showFloatTip("文章下载完毕！", 4000);
-                        break;
-                    case "category":
-                        await this.downloadCategory();
-                        break;
-                    case "user_all_articles":
-                        await this.downloadUserAllArticles();
-                        break;
-                }
-            } catch (error) {
-                this.mainErrorHandler(error);
-            } finally {
-                if (!GM_getValue("zipCategories")) {
-                    this.uiManager.enableFloatWindow();
-                }
-                this.fileManager.reset(); // 重置FileManager
+         * 下载单篇文章
+         * @param {Object} config - 配置选项
+         * @param {boolean} config.zipCategories - 是否将文章打包成zip
+         *
+         * @param {string} config.filePrefix - 文件名前缀
+         * @param {string} config.articleUrl - 文章链接
+         * @param {boolean} config.parallelDownload - 是否并行下载
+         * @param {boolean} config.fastDownload - 是否快速下载
+         * @param {boolean} config.mergeArticleContent - 是否合并文章内容
+         * @param {boolean} config.saveAllImagesToAssets - 是否将所有图片保存
+         * @param {boolean} config.addSerialNumber - 是否添加序号
+         * @param {boolean} config.addSerialNumberToTitle - 是否在标题前添加序号
+         * @param {boolean} config.addArticleInfoInBlockquote - 是否在引用块中添加文章信息
+         * @param {boolean} config.addArticleTitleToMarkdown - 是否在Markdown中添加文章标题
+         * @param {boolean} config.addArticleInfoInYaml - 是否在YAML中添加文章信息
+         * @param {boolean} config.saveWebImages - 是否保存网络图片
+         * @param {boolean} config.forceImageCentering - 是否强制图片居中
+         * @param {boolean} config.enableImageSize - 是否启用图片尺寸
+         * @param {boolean} config.enableColorText - 是否启用彩色文本
+         * @param {boolean} config.removeCSDNSearchLink - 是否移除CSDN搜索链接
+         **/
+        async downloadSingleArticle(config = {}) {
+            const articleTitle = await this.parseArticle(document.body, {
+                articleUrl: window.location.href,
+                ...config,
+                mergeArticleContent: false,
+            });
+            if (config.zipCategories) {
+                await this.fileManager.zipAllFilesInQueue(
+                    `${articleTitle}`,
+                    (info_string) => {
+                        this.uiManager.showFloatTip(info_string);
+                    },
+                    (info_string) => {
+                        this.uiManager.showFloatTip(info_string, 3000);
+                    }
+                );
             }
+            await this.fileManager.downloadAllFilesInQueue();
+            this.uiManager.showFloatTip("文章下载完毕！", 4000);
         }
     }
 
@@ -3981,16 +4079,8 @@
             return;
         }
 
-        const fileManager = new FileManager();
-        const markdownConverter = new MarkdownConverter(fileManager);
-        const uiManager = new UIManager(fileManager);
-        const downloadManager = new ArticleDownloader(fileManager, markdownConverter, uiManager);
-
-        // 设置UI与下载管理器的双向引用
-        uiManager.downloadManager = downloadManager;
-
-        // 更新选项状态
-        uiManager.updateAllOptions();
+        // 初始化App
+        const uiManager = new UIManager();
 
         // 检查是否有下载任务
         const status = GM_getValue("status");
