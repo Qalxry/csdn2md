@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      2.2.6
+// @version      2.3.1
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -437,7 +437,7 @@
             );
             this.addOption("addSerialNumber", '批量下载时文件名加入"No_"格式的序号前缀', true, optionContainer);
             this.addOption("zipCategories", "下载为压缩包", true, optionContainer, {
-                false: [{ id: "saveWebImages", value: false }],
+                false: [{ id: "saveWebImages", value: false }, { id: "saveAllImagesToAssets", value: false }],
             });
             this.addOption(
                 "addArticleInfoInYaml",
@@ -894,17 +894,17 @@
         /**
          * 将SVG内容保存到本地，添加到fileQueue，并返回本地路径
          * @param {string} svgText - SVG内容
-         * @param {string} mdAssetDirName - 资源文件夹名
-         * @param {string} img_prefix - 图片前缀
+         * @param {string} assetDirName - 资源文件夹名
+         * @param {string} imgPrefix - 图片前缀
          * @returns {Promise<string>} 本地SVG路径
          */
-        async saveSvgToLocal(svgText, mdAssetDirName, img_prefix = "") {
+        async saveSvgToLocal(svgText, assetDirName, imgPrefix = "") {
             // 检查参数是否合法
             if (typeof svgText !== "string") {
                 throw new Error("[saveSvgToLocal] Invalid argument: svgText must be a string.");
             }
 
-            const imgOwner = img_prefix + mdAssetDirName;
+            const imgOwner = imgPrefix + assetDirName;
 
             // 初始化
             if (!this.imageCount[imgOwner]) {
@@ -920,7 +920,7 @@
             // 记录图片数量
             this.imageCount[imgOwner]++;
             const index = this.imageCount[imgOwner];
-            const filename = `${mdAssetDirName}/${img_prefix}${index}.svg`;
+            const filename = `${assetDirName}/${imgPrefix}${index}.svg`;
 
             // 记录已保存的SVG
             this.imageSet[imgOwner][svgHash] = `./${filename}`;
@@ -938,11 +938,11 @@
         /**
          * 将网络图片保存到本地，添加到fileQueue，并返回本地路径
          * @param {string} imgUrl - 图片URL
-         * @param {string} mdAssetDirName - 资源文件夹名
-         * @param {string} img_prefix - 图片前缀
+         * @param {string} assetDirName - 资源文件夹名
+         * @param {string} imgPrefix - 图片前缀
          * @returns {Promise<string>} 本地图片路径
          */
-        async saveWebImageToLocal(imgUrl, mdAssetDirName, img_prefix = "") {
+        async saveWebImageToLocal(imgUrl, assetDirName, imgPrefix = "") {
             // 检查参数是否合法
             if (typeof imgUrl !== "string") {
                 throw new Error("[saveWebImageToLocal] Invalid argument: imgUrl must be a string.");
@@ -951,7 +951,7 @@
             // 清理URL
             imgUrl = Utils.clearUrl(imgUrl);
 
-            const imgOwner = img_prefix + mdAssetDirName;
+            const imgOwner = imgPrefix + assetDirName;
 
             // 初始化
             if (!this.imageCount[imgOwner]) {
@@ -975,7 +975,7 @@
             } else {
                 ext = `.${ext}`;
             }
-            const filename = `${mdAssetDirName}/${img_prefix}${index}${ext}`;
+            const filename = `${assetDirName}/${imgPrefix}${index}${ext}`;
 
             // 记录已保存的图片
             this.imageSet[imgOwner][imgUrl] = `./${filename}`;
@@ -1368,46 +1368,939 @@
         }
     }
 
+    // /**
+    //  * 模块: Markdown转换
+    //  * 将HTML转换为Markdown
+    //  */
+    // class MarkdownConverter {
+    //     /**
+    //      * @param {FileManager} fileManager - 文件管理实例
+    //      *
+    //      * @constructor
+    //      **/
+    //     constructor(fileManager) {
+    //         this.fileManager = fileManager;
+    //     }
+
+    //     /**
+    //      * 将HTML内容转换为Markdown格式
+    //      * @param {Element} articleElement - 文章DOM元素
+    //      * @param {string} assetDirName - 资源文件夹名
+    //      * @param {boolean} enableTOC - 是否启用目录
+    //      * @returns {Promise<string>} Markdown内容
+    //      */
+    //     async htmlToMarkdown(articleElement, assetDirName = "", enableTOC = true, imgPrefix = "") {
+    //         // 预定义的特殊字段
+    //         // 内容之间保持两个换行符
+    //         const CONSTANT_DOUBLE_NEW_LINE = "<|CSDN2MD@CONSTANT_DOUBLE_NEW_LINE@23hy7b|>";
+    //         // 分隔符用于美化，比如公式和文本之间加上空格会更美观
+    //         const SEPARATION_BEAUTIFICATION = "<|CSDN2MD@SEPARATION_BEAUTIFICATION@2caev2|>";
+
+    //         // 处理预定义的特殊字段
+    //         const DDNL = escapeRegExp(CONSTANT_DOUBLE_NEW_LINE);
+    //         const SEPB = escapeRegExp(SEPARATION_BEAUTIFICATION);
+
+    //         /**
+    //          * 特殊字符串修剪函数：移除字符串开头和结尾的分隔符(SEPB)和空白字符
+    //          * @param {string} [text=""] - 需要修剪的字符串 / The string to be trimmed
+    //          * @returns {string} 修剪后的字符串 / The trimmed string
+    //          */
+    //         function SpecialTrim(text = "") {
+    //             return text.replace(new RegExp(`^(?:${SEPB}|\\s)+`), "").replace(new RegExp(`(?:${SEPB}|\\s)+$`), "");
+    //         }
+
+    //         // 1. 连续的 "\n" 与 CONSTANT_DOUBLE_NEW_LINE 替换为 "\n\n"
+    //         const RE_DOUBLE_NL = new RegExp(`(?:\\n|${DDNL})*${DDNL}(?:\\n|${DDNL})*`, "g");
+    //         // 2. 连续的 SEPARATION_BEAUTIFICATION 替换为 " "，但如果前面是换行符，替换为 ""
+    //         const RE_SEP_NOLINE = new RegExp(`(?<!\\n)(?:${SEPB})+`, "g");
+    //         const RE_SEP_WITHNL = new RegExp(`(\\n)(?:${SEPB})+`, "g");
+
+    //         // 辅助：对常量做正则转义
+    //         function escapeRegExp(s) {
+    //             return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    //         }
+
+    //         // 辅助函数，用于转义特殊的Markdown字符
+    //         const escapeMarkdown = (text) => {
+    //             // return text.replace(/([\\`*_\{\}\[\]()#+\-.!])/g, "\\$1").trim();
+    //             return text.trim(); // 不转义特殊字符
+    //         };
+
+    //         /**
+    //          * 递归处理DOM节点并将其转换为Markdown
+    //          * @param {Node} node - 当前DOM节点
+    //          * @param {number} listLevel - 当前列表嵌套级别
+    //          * @returns {Promise<string>} 节点的Markdown字符串
+    //          */
+    //         const processNode = async (node, listLevel = 0) => {
+    //             let result = "";
+    //             const ELEMENT_NODE = 1;
+    //             const TEXT_NODE = 3;
+    //             const COMMENT_NODE = 8;
+
+    //             switch (node.nodeType) {
+    //                 case ELEMENT_NODE:
+    //                     // 处理元素节点
+    //                     switch (node.tagName.toLowerCase()) {
+    //                         case "h1":
+    //                         case "h2":
+    //                         case "h3":
+    //                         case "h4":
+    //                         case "h5":
+    //                         case "h6":
+    //                             {
+    //                                 const htype = Number(node.tagName[1]);
+
+    //                                 // FIX: 修复该页面中，hx标签的内容中有其他标签，而这里直接使用了textContent，造成内容丢失的BUG
+    //                                 // URL: https://blog.csdn.net/naozibuok/article/details/142671763
+    //                                 // <<< FIX BEGIN >>>
+
+    //                                 // 不再直接使用textContent
+    //                                 // result += `${"#".repeat(htype)} ${node.textContent.trim()}\n\n`;
+
+    //                                 // 移除节点内部开头的 <a> 标签
+    //                                 node.querySelectorAll("a").forEach((aTag) => {
+    //                                     if (aTag && aTag.textContent.trim() === "") {
+    //                                         aTag.remove();
+    //                                     }
+    //                                 });
+    //                                 // // 创建一个浮动的div元素，作为打印hx标签的内容，因为console.log被重写了
+    //                                 // let hxContent = document.getElementById("hxContent");
+    //                                 // if (!hxContent) {
+    //                                 //     hxContent = document.createElement("div");
+    //                                 //     hxContent.id = "hxContent";
+    //                                 //     hxContent.style.position = "absolute";
+    //                                 //     hxContent.style.left = "0";
+    //                                 //     hxContent.style.top = "0";
+    //                                 //     hxContent.style.zIndex = "9999";
+    //                                 //     hxContent.style.backgroundColor = "lightgray";
+    //                                 //     hxContent.style.border = "1px solid black";
+    //                                 //     hxContent.style.padding = "10px";
+    //                                 //     hxContent.style.width = "auto";
+    //                                 //     hxContent.style.height = "auto";
+    //                                 //     hxContent.style.whiteSpace = "pre-wrap";
+    //                                 //     hxContent.style.fontSize = "16px";
+    //                                 //     document.body.appendChild(hxContent);
+    //                                 // }
+    //                                 // hxContent.innerHTML += node.nodeType + " " + node.tagName + "<br>";
+    //                                 // hxContent.innerHTML += `Original: <br><textarea readonly rows="3" cols="100">${node.outerHTML}</textarea><br>`;
+    //                                 // 处理节点内部元素，包括hx标签的文本
+    //                                 let childContent = await processChildren(node, listLevel);
+    //                                 // hxContent.innerHTML += `Processed: <br><textarea readonly rows="3" cols="100">${childContent}</textarea><br>`;
+    //                                 const hPrefix = "#".repeat(htype);
+    //                                 // 按行分割分别处理。
+    //                                 // 如果该行内容不为空，则添加前缀。
+    //                                 childContent = childContent
+    //                                     .split("\n")
+    //                                     .map((line) => {
+    //                                         if (line.trim() !== "") {
+    //                                             // 如果该行内容是 <img /> 标签，则不添加前缀
+    //                                             if (
+    //                                                 line.trim().search("<img") !== -1 &&
+    //                                                 line.trim().search("/>") !== -1
+    //                                             ) {
+    //                                                 return line;
+    //                                             }
+    //                                             return `${hPrefix} ${line}`;
+    //                                         } else {
+    //                                             return line;
+    //                                         }
+    //                                     })
+    //                                     .join("\n");
+    //                                 // hxContent.innerHTML += `Markdown: <br><textarea readonly rows="1" cols="100">${childContent.replaceAll(
+    //                                 //     "\n",
+    //                                 //     "\\n"
+    //                                 // )}</textarea><br><hr>`;
+    //                                 result += `${childContent}${CONSTANT_DOUBLE_NEW_LINE}`;
+    //                                 // <<< FIX END >>>
+    //                             }
+    //                             break;
+    //                         case "p":
+    //                             {
+    //                                 const cls = node.getAttribute("class");
+    //                                 const style = node.getAttribute("style");
+    //                                 if (cls && cls.includes("img-center")) {
+    //                                     // Same as <center> tag
+    //                                     node.childNodes.forEach((child) => {
+    //                                         if (
+    //                                             child.nodeType === ELEMENT_NODE &&
+    //                                             child.tagName.toLowerCase() === "img"
+    //                                         ) {
+    //                                             if (!child.getAttribute("src").includes("#pic_center")) {
+    //                                                 child.setAttribute(
+    //                                                     "src",
+    //                                                     child.getAttribute("src") + "#pic_center"
+    //                                                 );
+    //                                             }
+    //                                         }
+    //                                     });
+    //                                     result += await processChildren(node, listLevel);
+    //                                     result += CONSTANT_DOUBLE_NEW_LINE;
+    //                                     break;
+    //                                 }
+    //                                 if (node.getAttribute("id") === "main-toc") {
+    //                                     if (enableTOC) {
+    //                                         result += `**目录**\n\n[TOC]\n\n`;
+    //                                     }
+    //                                     break;
+    //                                 }
+    //                                 let text = await processChildren(node, listLevel);
+    //                                 if (style) {
+    //                                     if (style.includes("padding-left")) {
+    //                                         break;
+    //                                     }
+    //                                     if (style.includes("text-align:center")) {
+    //                                         text = `<div style="text-align:center;">${Utils.shrinkHtml(
+    //                                             node.innerHTML
+    //                                         )}</div>\n\n`;
+    //                                     } else if (style.includes("text-align:right")) {
+    //                                         text = `<div style="text-align:right;">${Utils.shrinkHtml(
+    //                                             node.innerHTML
+    //                                         )}</div>\n\n`;
+    //                                     } else if (style.includes("text-align:justify")) {
+    //                                         text += "\n\n";
+    //                                     } else {
+    //                                         text += "\n\n";
+    //                                     }
+    //                                 } else {
+    //                                     text += "\n\n";
+    //                                 }
+    //                                 result += text;
+    //                             }
+    //                             break;
+    //                         case "strong":
+    //                         case "b":
+    //                             result += `${SEPARATION_BEAUTIFICATION}**${SpecialTrim(
+    //                                 await processChildren(node, listLevel)
+    //                             )}**${SEPARATION_BEAUTIFICATION}`;
+    //                             break;
+    //                         case "em":
+    //                         case "i":
+    //                             result += `${SEPARATION_BEAUTIFICATION}*${SpecialTrim(
+    //                                 await processChildren(node, listLevel)
+    //                             )}*${SEPARATION_BEAUTIFICATION}`;
+    //                             break;
+    //                         case "u":
+    //                             result += `${SEPARATION_BEAUTIFICATION}<u>${SpecialTrim(
+    //                                 await processChildren(node, listLevel)
+    //                             )}</u>${SEPARATION_BEAUTIFICATION}`;
+    //                             break;
+    //                         case "s":
+    //                         case "strike":
+    //                             result += `${SEPARATION_BEAUTIFICATION}~~${SpecialTrim(
+    //                                 await processChildren(node, listLevel)
+    //                             )}~~${SEPARATION_BEAUTIFICATION}`;
+    //                             break;
+    //                         case "a":
+    //                             {
+    //                                 const node_class = node.getAttribute("class");
+    //                                 if (node_class && node_class.includes("footnote-backref")) {
+    //                                     break;
+    //                                 }
+    //                                 const href = node.getAttribute("href") || "";
+    //                                 if (node_class && node_class.includes("has-card")) {
+    //                                     const desc = node.title || "";
+    //                                     result += `[${desc}](${href}) `;
+    //                                     break;
+    //                                 }
+    //                                 const text = await processChildren(node, listLevel);
+    //                                 if (
+    //                                     href.includes("https://so.csdn.net/so/search") &&
+    //                                     GM_getValue("removeCSDNSearchLink")
+    //                                 ) {
+    //                                     result += `${text}`;
+    //                                     break;
+    //                                 }
+    //                                 result += `${SEPARATION_BEAUTIFICATION}[${text}](${href})${SEPARATION_BEAUTIFICATION}`;
+    //                             }
+    //                             break;
+    //                         case "img":
+    //                             {
+    //                                 let src = node.getAttribute("src") || "";
+    //                                 const alt = node.getAttribute("alt") || "";
+    //                                 const cls = node.getAttribute("class") || "";
+    //                                 const width = node.getAttribute("width") || "";
+    //                                 const height = node.getAttribute("height") || "";
+
+    //                                 if (cls.includes("mathcode")) {
+    //                                     result += `${SEPARATION_BEAUTIFICATION}\$\$\n${alt}\n\$\$`;
+    //                                 } else {
+    //                                     if (src.includes("#pic_center") || GM_getValue("forceImageCentering")) {
+    //                                         result += CONSTANT_DOUBLE_NEW_LINE;
+    //                                     } else {
+    //                                         result += " ";
+    //                                     }
+    //                                     if (GM_getValue("saveWebImages")) {
+    //                                         src = await this.fileManager.saveWebImageToLocal(
+    //                                             src,
+    //                                             assetDirName,
+    //                                             imgPrefix
+    //                                         );
+    //                                     }
+    //                                     if (height && GM_getValue("enableImageSize")) {
+    //                                         // 如果 height 是数字，则添加 px
+    //                                         // 如果带有单位，则直接使用
+    //                                         const heightValue = height.replace(/[^0-9]/g, "");
+    //                                         const heightUnit = height.replace(/[0-9]/g, "") || "px";
+    //                                         const heightStyle = heightValue
+    //                                             ? `max-height:${heightValue}${heightUnit};`
+    //                                             : "";
+    //                                         result += `<img src="${src}" alt="${alt}" style="${heightStyle} box-sizing:content-box;" />`;
+    //                                     } else if (width && GM_getValue("enableImageSize")) {
+    //                                         // 如果 width 是数字，则添加 px
+    //                                         // 如果带有单位，则直接使用
+    //                                         const widthValue = width.replace(/[^0-9]/g, "");
+    //                                         const widthUnit = width.replace(/[0-9]/g, "") || "px";
+    //                                         const widthStyle = widthValue ? `max-width:${widthValue}${widthUnit};` : "";
+    //                                         result += `<img src="${src}" alt="${alt}" style="${widthStyle} box-sizing:content-box;" />`;
+    //                                     } else {
+    //                                         result += `![${alt}](${src})`;
+    //                                     }
+    //                                     result += CONSTANT_DOUBLE_NEW_LINE;
+    //                                 }
+    //                             }
+    //                             break;
+    //                         case "ul":
+    //                             result += await processList(node, listLevel, false);
+    //                             break;
+    //                         case "ol":
+    //                             result += await processList(node, listLevel, true);
+    //                             break;
+    //                         case "blockquote":
+    //                             {
+    //                                 const text = (await processChildren(node, listLevel))
+    //                                     .trim()
+    //                                     .split("\n")
+    //                                     .map((line) => (line ? `> ${line}` : "> "))
+    //                                     .join("\n");
+    //                                 result += `${text}\n\n`;
+    //                             }
+    //                             break;
+    //                         case "pre":
+    //                             {
+    //                                 const codeNode = node.querySelector("code");
+    //                                 if (codeNode) {
+    //                                     const className = codeNode.className || "";
+    //                                     let language = "";
+    //                                     // 新版本的代码块，class含有language-xxx
+    //                                     if (className.includes("language-")) {
+    //                                         const languageMatch = className.split(" ");
+    //                                         // 找到第一个language-开头的字符串
+    //                                         for (const item of languageMatch) {
+    //                                             if (item.startsWith("language-")) {
+    //                                                 language = item;
+    //                                                 break;
+    //                                             }
+    //                                         }
+    //                                         language = language.replace("language-", "");
+    //                                     }
+    //                                     // 老版本的代码块
+    //                                     else if (className.startsWith("hljs")) {
+    //                                         const languageMatch = className.split(" ");
+    //                                         language = languageMatch ? languageMatch[1] : "";
+    //                                     }
+    //                                     result += `\`\`\`${language}\n${await processCodeBlock(codeNode)}\`\`\`\n\n`;
+    //                                 } else {
+    //                                     console.warn("Code block without <code> element:", node.outerHTML);
+    //                                     const codeText = node.textContent.replace(/^\s+|\s+$/g, "");
+    //                                     result += `\`\`\`\n${codeText}\n\`\`\`\n\n`;
+    //                                 }
+    //                             }
+    //                             break;
+    //                         case "code":
+    //                             {
+    //                                 const codeText = node.textContent;
+    //                                 result += `${SEPARATION_BEAUTIFICATION}\`${codeText}\`${SEPARATION_BEAUTIFICATION}`;
+    //                             }
+    //                             break;
+    //                         case "hr":
+    //                             if (node.getAttribute("id") !== "hr-toc") {
+    //                                 result += `---\n\n`;
+    //                             }
+    //                             break;
+    //                         case "br":
+    //                             result += `\n`;
+    //                             break;
+    //                         case "table":
+    //                             result += (await processTable(node)) + "\n\n";
+    //                             break;
+    //                         case "div":
+    //                             {
+    //                                 const className = node.getAttribute("class") || "";
+    //                                 if (className.includes("csdn-video-box")) {
+    //                                     const iframe = node.querySelector("iframe");
+    //                                     const src = iframe.getAttribute("src") || "";
+    //                                     const title = node.querySelector("p").textContent || "";
+    //                                     const iframeHTML = iframe.outerHTML.replace(
+    //                                         "></iframe>",
+    //                                         ' style="width: 100%; aspect-ratio: 2;"></iframe>'
+    //                                     );
+    //                                     result += `<div align="center" style="border: 3px solid gray;border-radius: 27px;overflow: hidden;"> <a class="link-info" href="${src}" rel="nofollow" title="${title}">${title}</a>${iframeHTML}</div>\n\n`;
+    //                                 } else if (className.includes("toc")) {
+    //                                     const customTitle = node.querySelector("h4")?.textContent || "";
+    //                                     if (enableTOC) {
+    //                                         result += `**${customTitle}**\n\n[TOC]\n\n`;
+    //                                     }
+    //                                 } else {
+    //                                     result += `${await processChildren(node, listLevel)}\n`;
+    //                                 }
+    //                             }
+    //                             break;
+    //                         case "span":
+    //                             {
+    //                                 const node_class = node.getAttribute("class");
+    //                                 if (node_class) {
+    //                                     if (
+    //                                         node_class.includes("katex--inline") ||
+    //                                         node_class.includes("katex--display")
+    //                                     ) {
+    //                                         const katex_mathml_elem = node.querySelector(".katex-mathml");
+    //                                         const katex_html_elem = node.querySelector(".katex-html");
+    //                                         if (katex_mathml_elem !== null && katex_html_elem !== null) {
+    //                                             // 移除.katex-mathml里的.MathJax_Display类，否则会造成错乱
+    //                                             if (
+    //                                                 katex_mathml_elem.querySelector(".MathJax_Display") &&
+    //                                                 katex_mathml_elem.querySelector("script")
+    //                                             ) {
+    //                                                 katex_mathml_elem
+    //                                                     .querySelectorAll(".MathJax_Display")
+    //                                                     .forEach((elem) => elem.remove());
+    //                                             }
+    //                                             if (
+    //                                                 katex_mathml_elem.querySelector(".MathJax_Preview") &&
+    //                                                 katex_mathml_elem.querySelector("script")
+    //                                             ) {
+    //                                                 katex_mathml_elem
+    //                                                     .querySelectorAll(".MathJax_Preview")
+    //                                                     .forEach((elem) => elem.remove());
+    //                                             }
+    //                                             if (
+    //                                                 katex_mathml_elem.querySelector(".MathJax_Error") &&
+    //                                                 katex_mathml_elem.querySelector("script")
+    //                                             ) {
+    //                                                 katex_mathml_elem
+    //                                                     .querySelectorAll(".MathJax_Error")
+    //                                                     .forEach((elem) => elem.remove());
+    //                                             }
+
+    //                                             const mathml = Utils.clearSpecialChars(katex_mathml_elem.textContent);
+    //                                             const katex_html = Utils.clearSpecialChars(katex_html_elem.textContent);
+    //                                             if (node_class.includes("katex--inline")) {
+    //                                                 if (mathml.startsWith(katex_html)) {
+    //                                                     result += `${SEPARATION_BEAUTIFICATION}\$${mathml.replace(
+    //                                                         katex_html,
+    //                                                         ""
+    //                                                     )}\$${SEPARATION_BEAUTIFICATION}`;
+    //                                                 } else {
+    //                                                     result += `${SEPARATION_BEAUTIFICATION}\$${Utils.clearKatexMathML(
+    //                                                         katex_mathml_elem.textContent
+    //                                                     )}\$${SEPARATION_BEAUTIFICATION}`;
+    //                                                 }
+    //                                             } else {
+    //                                                 if (mathml.startsWith(katex_html)) {
+    //                                                     result += `${CONSTANT_DOUBLE_NEW_LINE}\$\$\n${mathml.replace(
+    //                                                         katex_html,
+    //                                                         ""
+    //                                                     )}\n\$\$${CONSTANT_DOUBLE_NEW_LINE}`;
+    //                                                 } else {
+    //                                                     result += `${CONSTANT_DOUBLE_NEW_LINE}\$\$\n${Utils.clearKatexMathML(
+    //                                                         katex_mathml_elem.textContent
+    //                                                     )}\n\$\$${CONSTANT_DOUBLE_NEW_LINE}`;
+    //                                                 }
+    //                                             }
+    //                                         }
+    //                                         break;
+    //                                     }
+    //                                 }
+    //                                 const style = node.getAttribute("style") || "";
+    //                                 if (
+    //                                     (style.includes("background-color") || style.includes("color")) &&
+    //                                     GM_getValue("enableColorText")
+    //                                 ) {
+    //                                     result += `<span style="${style}">${await processChildren(
+    //                                         node,
+    //                                         listLevel
+    //                                     )}</span>`;
+    //                                 } else {
+    //                                     result += await processChildren(node, listLevel);
+    //                                 }
+    //                             }
+    //                             break;
+    //                         case "kbd":
+    //                             result += `${SEPARATION_BEAUTIFICATION}<kbd>${node.textContent}</kbd>${SEPARATION_BEAUTIFICATION}`;
+    //                             break;
+    //                         case "mark":
+    //                             result += `${SEPARATION_BEAUTIFICATION}<mark>${await processChildren(
+    //                                 node,
+    //                                 listLevel
+    //                             )}</mark>${SEPARATION_BEAUTIFICATION}`;
+    //                             break;
+    //                         case "sub":
+    //                             result += `<sub>${await processChildren(node, listLevel)}</sub>`;
+    //                             break;
+    //                         case "sup":
+    //                             {
+    //                                 const node_class = node.getAttribute("class");
+    //                                 if (node_class && node_class.includes("footnote-ref")) {
+    //                                     result += `[^${node.textContent}]`;
+    //                                 } else {
+    //                                     result += `<sup>${await processChildren(node, listLevel)}</sup>`;
+    //                                 }
+    //                             }
+    //                             break;
+    //                         case "svg":
+    //                             {
+    //                                 const style = node.getAttribute("style");
+    //                                 if (style && style.includes("display: none")) {
+    //                                     break;
+    //                                 }
+    //                                 // 为foreignObject里的div添加属性xmlns="http://www.w3.org/1999/xhtml"，否则typora无法识别
+    //                                 const foreignObjects = node.querySelectorAll("foreignObject");
+    //                                 for (const foreignObject of foreignObjects) {
+    //                                     const divs = foreignObject.querySelectorAll("div");
+    //                                     divs.forEach((div) => {
+    //                                         div.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+    //                                     });
+    //                                 }
+    //                                 if (GM_getValue("saveWebImages")) {
+    //                                     const svgSavePath = await this.fileManager.saveSvgToLocal(
+    //                                         node.outerHTML,
+    //                                         assetDirName,
+    //                                         imgPrefix
+    //                                     );
+    //                                     result += `![](${svgSavePath})${CONSTANT_DOUBLE_NEW_LINE}`;
+    //                                 } else {
+    //                                     // 检查是否有style标签存在于svg元素内，如果有则转换为base64形式
+    //                                     if (node.querySelector("style")) {
+    //                                         // 将SVG转换为base64编码
+    //                                         const base64 = Utils.svgToBase64(node.outerHTML);
+    //                                         result += `![](data:image/svg+xml;base64,${base64})${CONSTANT_DOUBLE_NEW_LINE}`;
+    //                                     } else {
+    //                                         result += `<div align="center">${node.outerHTML}</div>${CONSTANT_DOUBLE_NEW_LINE}`;
+    //                                     }
+    //                                 }
+    //                             }
+    //                             break;
+    //                         case "section": // 这个是注脚的内容
+    //                             {
+    //                                 const node_class = node.getAttribute("class");
+    //                                 if (node_class && node_class.includes("footnotes")) {
+    //                                     result += await processFootnotes(node);
+    //                                 }
+    //                             }
+    //                             break;
+    //                         case "input":
+    //                             // 仅处理checkbox类型的input元素
+    //                             if (node.getAttribute("type") === "checkbox") {
+    //                                 result += `[${node.checked ? "x" : " "}] `;
+    //                             }
+    //                             break;
+    //                         case "dl":
+    //                             // 自定义列表，直接用html
+    //                             result += `${Utils.shrinkHtml(node.outerHTML)}\n\n`;
+    //                             break;
+    //                         case "abbr":
+    //                             result += `${Utils.shrinkHtml(node.outerHTML)}`;
+    //                             break;
+    //                         case "font":
+    //                             // 避免进入 default : https://blog.csdn.net/azhengye/article/details/8481846
+    //                             result += await processChildren(node, listLevel);
+    //                             break;
+    //                         case "td":
+    //                         case "th":
+    //                             // 处理表格单元格
+    //                             result += await processChildren(node, listLevel);
+    //                             break;
+    //                         case "center":
+    //                             // 处理居中标签
+    //                             if (node.childNodes.length === 1 && node.childNodes[0].nodeType === TEXT_NODE) {
+    //                                 result += `<center>${node.textContent.trim().replace("\n", "<br>")}</center>\n\n`;
+    //                             } else {
+    //                                 node.childNodes.forEach((child) => {
+    //                                     if (child.nodeType === ELEMENT_NODE && child.tagName.toLowerCase() === "img") {
+    //                                         if (!child.getAttribute("src").includes("#pic_center")) {
+    //                                             child.setAttribute("src", child.getAttribute("src") + "#pic_center");
+    //                                         }
+    //                                     }
+    //                                 });
+    //                                 result += await processChildren(node, listLevel);
+    //                                 result += CONSTANT_DOUBLE_NEW_LINE;
+    //                             }
+    //                             break;
+    //                         default:
+    //                             result += await processChildren(node, listLevel);
+    //                             result += CONSTANT_DOUBLE_NEW_LINE;
+    //                             break;
+    //                     }
+    //                     break;
+    //                 case TEXT_NODE:
+    //                     // 处理文本节点（即没有被单独的标签包裹的文本）
+    //                     result += escapeMarkdown(node.textContent);
+    //                     break;
+    //                 case COMMENT_NODE:
+    //                     // 忽略注释
+    //                     break;
+    //                 default:
+    //                     break;
+    //             }
+    //             return result;
+    //         };
+
+    //         /**
+    //          * 处理给定节点的子节点
+    //          * @param {Node} node - 父节点
+    //          * @param {number} listLevel - 当前列表嵌套级别
+    //          * @returns {Promise<string>} 子节点拼接后的Markdown字符串
+    //          */
+    //         const processChildren = async (node, listLevel) => {
+    //             let text = "";
+    //             for (const child of node.childNodes) {
+    //                 text += await processNode(child, listLevel);
+    //             }
+    //             return text;
+    //         };
+
+    //         /**
+    //          * 处理列表元素
+    //          * @param {Element} node - 列表元素
+    //          * @param {number} listLevel - 当前列表嵌套级别
+    //          * @param {boolean} ordered - 列表是否有序
+    //          * @returns {Promise<string>} 列表的Markdown字符串
+    //          */
+    //         const processList = async (node, listLevel, ordered) => {
+    //             let text = CONSTANT_DOUBLE_NEW_LINE;
+    //             const children = Array.from(node.children).filter((child) => child.tagName.toLowerCase() === "li");
+    //             for (let index = 0; index < children.length; index++) {
+    //                 const child = children[index];
+
+    //                 let prefix = ordered ? `${index + 1}. ` : `- `;
+    //                 let indent = ordered ? "   " : "  ";
+
+    //                 let childText = `${await processChildren(child, listLevel + 1)}`;
+
+    //                 // 由于缩进，这里必须先替换掉 CONSTANT_DOUBLE_NEW_LINE
+    //                 childText = childText.replace(RE_DOUBLE_NL, "\n\n");
+
+    //                 childText = childText
+    //                     .split("\n")
+    //                     .map((line, index) => {
+    //                         // 如果是空行，则不添加缩进
+    //                         if (line.trim() === "" || index === 0) {
+    //                             return line;
+    //                         }
+    //                         // 否则添加缩进
+    //                         return `${indent}${line}`;
+    //                     })
+    //                     .join("\n");
+
+    //                 text += `${prefix}${childText}${CONSTANT_DOUBLE_NEW_LINE}`;
+    //             }
+    //             // text += `\n`;
+    //             return text;
+    //         };
+
+    //         /**
+    //          * 处理表格
+    //          * @param {Element} node - 包含表格的元素
+    //          * @returns {Promise<string>} 表格的Markdown字符串
+    //          */
+    //         const processTable = async (node) => {
+    //             const rows = Array.from(node.querySelectorAll("tr"));
+    //             if (rows.length === 0) return "";
+
+    //             let table = "";
+
+    //             // 处理表头
+    //             const headerCells = Array.from(rows[0].querySelectorAll("th, td"));
+    //             const headers = await Promise.all(
+    //                 headerCells.map(async (cell) => (await processNode(cell)).trim().replaceAll(RE_DOUBLE_NL, "<br />"))
+    //             );
+    //             table += `| ${headers.join(" | ")} |\n`;
+
+    //             // 处理分隔符
+    //             const alignments = headerCells.map((cell) => {
+    //                 const align = cell.getAttribute("align");
+    //                 if (align === "center") {
+    //                     return ":---:";
+    //                 } else if (align === "right") {
+    //                     return "---:";
+    //                 } else if (align === "left") {
+    //                     return ":---";
+    //                 } else {
+    //                     return ":---:";
+    //                 }
+    //             });
+    //             table += `|${alignments.join("|")}|\n`;
+
+    //             // 处理表格内容
+    //             for (let i = 1; i < rows.length; i++) {
+    //                 const cells = Array.from(rows[i].querySelectorAll("td"));
+    //                 const row = await Promise.all(
+    //                     cells.map(async (cell) => (await processNode(cell)).trim().replaceAll(RE_DOUBLE_NL, "<br />"))
+    //                 );
+    //                 table += `| ${row.join(" | ")} |`;
+    //                 if (i < rows.length - 1) {
+    //                     table += "\n";
+    //                 }
+    //             }
+    //             return table;
+    //         };
+
+    //         /**
+    //          * 处理代码块
+    //          * @param {Element} codeNode - 包含代码的元素
+    //          * @returns {Promise<string>} 代码块的Markdown字符串
+    //          */
+    //         const processCodeBlock = async (codeNode) => {
+    //             // 查找code内部是否有ol元素
+    //             const node = codeNode.querySelector("ol");
+
+    //             // 确保传入的节点是一个<ol>元素
+    //             if (!node || node.tagName.toLowerCase() !== "ol") {
+    //                 // 如果没有ol元素，则说明是老版本，直接返回codeNode的textContent
+    //                 return codeNode.textContent.replace(/\n$/, "") + "\n";
+    //             }
+
+    //             // 获取所有<li>子元素
+    //             const listItems = node.querySelectorAll("li");
+    //             let result = "";
+
+    //             // 遍历每个<li>元素
+    //             listItems.forEach((li) => {
+    //                 result += li.textContent;
+    //                 result += "\n";
+    //             });
+
+    //             return result;
+    //         };
+
+    //         /**
+    //          * 处理脚注
+    //          * @param {Element} node - 包含脚注的元素
+    //          * @returns {Promise<string>} 脚注的Markdown字符串
+    //          */
+    //         const processFootnotes = async (node) => {
+    //             const footnotes = Array.from(node.querySelectorAll("li"));
+    //             let result = "";
+
+    //             for (let index = 0; index < footnotes.length; index++) {
+    //                 const li = footnotes[index];
+    //                 const text = (await processNode(li)).replaceAll("\n", " ").replaceAll("↩︎", "").trim();
+    //                 result += `[^${index + 1}]: ${text}\n`;
+    //             }
+
+    //             return result;
+    //         };
+
+    //         let markdown = "";
+    //         for (const child of articleElement.childNodes) {
+    //             markdown += await processNode(child);
+    //         }
+    //         markdown = markdown.trim();
+
+    //         markdown = markdown
+    //             .replaceAll(RE_DOUBLE_NL, "\n\n") // 1. 吃掉前后重复换行和标记，统一为两个换行
+    //             .replaceAll(RE_SEP_NOLINE, " ") // 2.a 非换行前的标记串 → 空格
+    //             .replaceAll(RE_SEP_WITHNL, "$1"); // 2.b 换行后的标记串 → 保留换行
+
+    //         return markdown;
+    //     }
+    // }
+
     /**
      * 模块: Markdown转换
      * 将HTML转换为Markdown
      */
     class MarkdownConverter {
         /**
+         * 创建HTML标签到处理函数的映射表
+         * @returns {Object} 标签名称到处理方法的映射
+         */
+        static createTagHandlers() {
+            return {
+                h1: this.prototype.handleHeading,
+                h2: this.prototype.handleHeading,
+                h3: this.prototype.handleHeading,
+                h4: this.prototype.handleHeading,
+                h5: this.prototype.handleHeading,
+                h6: this.prototype.handleHeading,
+                p: this.prototype.handleParagraph,
+                strong: this.prototype.handleStrong,
+                b: this.prototype.handleStrong,
+                em: this.prototype.handleEmphasis,
+                i: this.prototype.handleEmphasis,
+                u: this.prototype.handleUnderline,
+                s: this.prototype.handleStrikethrough,
+                strike: this.prototype.handleStrikethrough,
+                a: this.prototype.handleAnchor,
+                img: this.prototype.handleImage,
+                ul: this.prototype.handleList,
+                ol: this.prototype.handleList,
+                blockquote: this.prototype.handleBlockquote,
+                pre: this.prototype.handlePreformatted,
+                code: this.prototype.handleCode,
+                hr: this.prototype.handleHorizontalRule,
+                br: this.prototype.handleLineBreak,
+                table: this.prototype.handleTable,
+                div: this.prototype.handleDiv,
+                span: this.prototype.handleSpan,
+                kbd: this.prototype.handleKeyboard,
+                mark: this.prototype.handleMark,
+                sub: this.prototype.handleSubscript,
+                sup: this.prototype.handleSuperscript,
+                svg: this.prototype.handleSvg,
+                section: this.prototype.handleSection,
+                input: this.prototype.handleInput,
+                dl: this.prototype.handleDefinitionList,
+                abbr: this.prototype.handleAbbreviation,
+                font: this.prototype.handleFont,
+                td: this.prototype.handleTableCell,
+                th: this.prototype.handleTableCell,
+                center: this.prototype.handleCenter,
+            };
+        }
+
+        /**
          * @param {FileManager} fileManager - 文件管理实例
-         *
          * @constructor
-         **/
+         */
         constructor(fileManager) {
             this.fileManager = fileManager;
+            this.tagHandlers = MarkdownConverter.createTagHandlers();
+
+            // 预定义的特殊字段
+            // 内容之间保持两个换行符
+            this.CONSTANT_DOUBLE_NEW_LINE = "<|CSDN2MD@CONSTANT_DOUBLE_NEW_LINE@23hy7b|>";
+            // 分隔符用于美化，比如公式和文本之间加上空格会更美观
+            this.SEPARATION_BEAUTIFICATION = "<|CSDN2MD@SEPARATION_BEAUTIFICATION@2caev2|>";
+
+            // 节点类型常量
+            this.ELEMENT_NODE = 1;
+            this.TEXT_NODE = 3;
+            this.COMMENT_NODE = 8;
         }
 
         /**
          * 将HTML内容转换为Markdown格式
          * @param {Element} articleElement - 文章DOM元素
-         * @param {string} mdAssetDirName - 资源文件夹名
-         * @param {boolean} enableTOC - 是否启用目录
+         * @param {Object} config - 配置选项
+         * @param {string} [config.assetDirName=""] - 资源文件夹名
+         * @param {boolean} [config.enableTOC=true] - 是否启用目录
+         * @param {string} [config.imgPrefix=""] - 图片文件前缀
+         * @param {boolean} [config.saveWebImages=false] - 是否将网络图片保存到本地
+         * @param {boolean} [config.forceImageCentering=false] - 是否强制所有图片居中
+         * @param {boolean} [config.enableImageSize=false] - 是否保留图片尺寸
+         * @param {boolean} [config.enableColorText=false] - 是否保留彩色文本
+         * @param {boolean} [config.removeCSDNSearchLink=true] - 是否移除CSDN搜索链接
          * @returns {Promise<string>} Markdown内容
          */
-        async htmlToMarkdown(articleElement, mdAssetDirName = "", enableTOC = true, img_prefix = "") {
-            // 预定义的特殊字段
-            // 内容之间保持两个换行符
-            const CONSTANT_DOUBLE_NEW_LINE = "<|CSDN2MD@CONSTANT_DOUBLE_NEW_LINE@23hy7b|>";
-            // 分隔符用于美化，比如公式和文本之间加上空格会更美观
-            const SEPARATION_BEAUTIFICATION = "<|CSDN2MD@SEPARATION_BEAUTIFICATION@2caev2|>";
+        async htmlToMarkdown(articleElement, config = {}) {
+            // 设置默认配置
+            const defaultConfig = {
+                assetDirName: "",
+                enableTOC: true,
+                imgPrefix: "",
+                saveWebImages: false,
+                forceImageCentering: false,
+                enableImageSize: false,
+                enableColorText: false,
+                removeCSDNSearchLink: true,
+            };
 
-            // 处理预定义的特殊字段
-            const DDNL = escapeRegExp(CONSTANT_DOUBLE_NEW_LINE);
-            const SEPB = escapeRegExp(SEPARATION_BEAUTIFICATION);
+            // 合并用户配置和默认配置，并添加上下文信息
+            const context = {
+                ...defaultConfig,
+                ...config,
+                listLevel: 0,
+            };
 
-            /**
-             * 特殊字符串修剪函数：移除字符串开头和结尾的分隔符(SEPB)和空白字符
-             * @param {string} [text=""] - 需要修剪的字符串 / The string to be trimmed
-             * @returns {string} 修剪后的字符串 / The trimmed string
-             */
-            function SpecialTrim(text = "") {
-                return text.replace(new RegExp(`^(?:${SEPB}|\\s)+`), "").replace(new RegExp(`(?:${SEPB}|\\s)+$`), "");
+            // 处理文章元素的子节点
+            const markdown = await this.processChildren(articleElement, context);
+
+            // 后处理Markdown内容，美化输出
+            return this.postProcessMarkdown(markdown.trim());
+        }
+
+        /**
+         * 处理单个DOM节点
+         * @param {Node} node - 当前DOM节点
+         * @param {Object} context - 处理上下文
+         * @returns {Promise<string>} 节点的Markdown字符串
+         */
+        async processNode(node, context) {
+            switch (node.nodeType) {
+                case this.ELEMENT_NODE:
+                    const tagName = node.tagName.toLowerCase();
+                    const handler = this.tagHandlers[tagName];
+                    return handler
+                        ? await handler.call(this, node, context)
+                        : await this.handleDefaultElement(node, context);
+
+                case this.TEXT_NODE:
+                    // 处理文本节点（即没有被单独的标签包裹的文本）
+                    return this.escapeMarkdown(node.textContent);
+
+                case this.COMMENT_NODE:
+                    // 忽略注释
+                    return "";
+
+                default:
+                    return "";
             }
+        }
+
+        /**
+         * 处理元素的子节点
+         * @param {Node} node - 父节点
+         * @param {Object} context - 处理上下文
+         * @returns {Promise<string>} 子节点拼接后的Markdown字符串
+         */
+        async processChildren(node, context) {
+            let result = "";
+            for (const child of node.childNodes) {
+                result += await this.processNode(child, context);
+            }
+            return result;
+        }
+
+        /**
+         * 转义特殊的Markdown字符
+         * @param {string} text - 需要转义的文本
+         * @returns {string} 转义后的文本
+         */
+        escapeMarkdown(text) {
+            // 注：原代码中有一个被注释掉的转义逻辑，这里只保留了trim操作
+            // return text.replace(/([\\`*_\{\}\[\]()#+\-.!])/g, "\\$1").trim();
+            return text.trim(); // 不转义特殊字符
+        }
+
+        /**
+         * 对常量做正则转义
+         * @param {string} s - 需要转义的字符串
+         * @returns {string} 转义后的字符串
+         */
+        escapeRegExp(s) {
+            return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        }
+
+        /**
+         * 特殊字符串修剪函数：移除字符串开头和结尾的分隔符和空白字符
+         * @param {string} text - 需要修剪的字符串
+         * @returns {string} 修剪后的字符串
+         */
+        specialTrim(text = "") {
+            const SEPB = this.escapeRegExp(this.SEPARATION_BEAUTIFICATION);
+            return text.replace(new RegExp(`^(?:${SEPB}|\\s)+`), "").replace(new RegExp(`(?:${SEPB}|\\s)+$`), "");
+        }
+
+        /**
+         * 后处理Markdown内容
+         * @param {string} markdown - 原始Markdown内容
+         * @returns {string} 处理后的Markdown内容
+         */
+        postProcessMarkdown(markdown) {
+            const DDNL = this.escapeRegExp(this.CONSTANT_DOUBLE_NEW_LINE);
+            const SEPB = this.escapeRegExp(this.SEPARATION_BEAUTIFICATION);
 
             // 1. 连续的 "\n" 与 CONSTANT_DOUBLE_NEW_LINE 替换为 "\n\n"
             const RE_DOUBLE_NL = new RegExp(`(?:\\n|${DDNL})*${DDNL}(?:\\n|${DDNL})*`, "g");
@@ -1415,695 +2308,680 @@
             const RE_SEP_NOLINE = new RegExp(`(?<!\\n)(?:${SEPB})+`, "g");
             const RE_SEP_WITHNL = new RegExp(`(\\n)(?:${SEPB})+`, "g");
 
-            // 辅助：对常量做正则转义
-            function escapeRegExp(s) {
-                return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-            }
+            return markdown
+                .replaceAll(RE_DOUBLE_NL, "\n\n") // 吃掉前后重复换行和标记，统一为两个换行
+                .replaceAll(RE_SEP_NOLINE, " ") // 非换行前的标记串 → 空格
+                .replaceAll(RE_SEP_WITHNL, "$1"); // 换行后的标记串 → 保留换行
+        }
 
-            // 辅助函数，用于转义特殊的Markdown字符
-            const escapeMarkdown = (text) => {
-                // return text.replace(/([\\`*_\{\}\[\]()#+\-.!])/g, "\\$1").trim();
-                return text.trim(); // 不转义特殊字符
-            };
+        /****************************************
+         * 标签处理函数
+         ****************************************/
 
-            /**
-             * 递归处理DOM节点并将其转换为Markdown
-             * @param {Node} node - 当前DOM节点
-             * @param {number} listLevel - 当前列表嵌套级别
-             * @returns {Promise<string>} 节点的Markdown字符串
-             */
-            const processNode = async (node, listLevel = 0) => {
-                let result = "";
-                const ELEMENT_NODE = 1;
-                const TEXT_NODE = 3;
-                const COMMENT_NODE = 8;
+        /**
+         * 处理标题元素（h1-h6）
+         */
+        async handleHeading(node, context) {
+            const level = parseInt(node.tagName[1]);
 
-                switch (node.nodeType) {
-                    case ELEMENT_NODE:
-                        // 处理元素节点
-                        switch (node.tagName.toLowerCase()) {
-                            case "h1":
-                            case "h2":
-                            case "h3":
-                            case "h4":
-                            case "h5":
-                            case "h6":
-                                {
-                                    const htype = Number(node.tagName[1]);
+            // 移除节点内部开头的空 <a> 标签
+            node.querySelectorAll("a").forEach((aTag) => {
+                if (aTag && aTag.textContent.trim() === "") {
+                    aTag.remove();
+                }
+            });
 
-                                    // FIX: 修复该页面中，hx标签的内容中有其他标签，而这里直接使用了textContent，造成内容丢失的BUG
-                                    // URL: https://blog.csdn.net/naozibuok/article/details/142671763
-                                    // <<< FIX BEGIN >>>
+            let content = await this.processChildren(node, context);
 
-                                    // 不再直接使用textContent
-                                    // result += `${"#".repeat(htype)} ${node.textContent.trim()}\n\n`;
-
-                                    // 移除节点内部开头的 <a> 标签
-                                    node.querySelectorAll("a").forEach((aTag) => {
-                                        if (aTag && aTag.textContent.trim() === "") {
-                                            aTag.remove();
-                                        }
-                                    });
-                                    // // 创建一个浮动的div元素，作为打印hx标签的内容，因为console.log被重写了
-                                    // let hxContent = document.getElementById("hxContent");
-                                    // if (!hxContent) {
-                                    //     hxContent = document.createElement("div");
-                                    //     hxContent.id = "hxContent";
-                                    //     hxContent.style.position = "absolute";
-                                    //     hxContent.style.left = "0";
-                                    //     hxContent.style.top = "0";
-                                    //     hxContent.style.zIndex = "9999";
-                                    //     hxContent.style.backgroundColor = "lightgray";
-                                    //     hxContent.style.border = "1px solid black";
-                                    //     hxContent.style.padding = "10px";
-                                    //     hxContent.style.width = "auto";
-                                    //     hxContent.style.height = "auto";
-                                    //     hxContent.style.whiteSpace = "pre-wrap";
-                                    //     hxContent.style.fontSize = "16px";
-                                    //     document.body.appendChild(hxContent);
-                                    // }
-                                    // hxContent.innerHTML += node.nodeType + " " + node.tagName + "<br>";
-                                    // hxContent.innerHTML += `Original: <br><textarea readonly rows="3" cols="100">${node.outerHTML}</textarea><br>`;
-                                    // 处理节点内部元素，包括hx标签的文本
-                                    let childContent = await processChildren(node, listLevel);
-                                    // hxContent.innerHTML += `Processed: <br><textarea readonly rows="3" cols="100">${childContent}</textarea><br>`;
-                                    const hPrefix = "#".repeat(htype);
-                                    // 按行分割分别处理。
-                                    // 如果该行内容不为空，则添加前缀。
-                                    childContent = childContent
-                                        .split("\n")
-                                        .map((line) => {
-                                            if (line.trim() !== "") {
-                                                // 如果该行内容是 <img /> 标签，则不添加前缀
-                                                if (
-                                                    line.trim().search("<img") !== -1 &&
-                                                    line.trim().search("/>") !== -1
-                                                ) {
-                                                    return line;
-                                                }
-                                                return `${hPrefix} ${line}`;
-                                            } else {
-                                                return line;
-                                            }
-                                        })
-                                        .join("\n");
-                                    // hxContent.innerHTML += `Markdown: <br><textarea readonly rows="1" cols="100">${childContent.replaceAll(
-                                    //     "\n",
-                                    //     "\\n"
-                                    // )}</textarea><br><hr>`;
-                                    result += `${childContent}${CONSTANT_DOUBLE_NEW_LINE}`;
-                                    // <<< FIX END >>>
-                                }
-                                break;
-                            case "p":
-                                {
-                                    const cls = node.getAttribute("class");
-                                    const style = node.getAttribute("style");
-                                    if (cls && cls.includes("img-center")) {
-                                        // Same as <center> tag
-                                        node.childNodes.forEach((child) => {
-                                            if (
-                                                child.nodeType === ELEMENT_NODE &&
-                                                child.tagName.toLowerCase() === "img"
-                                            ) {
-                                                if (!child.getAttribute("src").includes("#pic_center")) {
-                                                    child.setAttribute(
-                                                        "src",
-                                                        child.getAttribute("src") + "#pic_center"
-                                                    );
-                                                }
-                                            }
-                                        });
-                                        result += await processChildren(node, listLevel);
-                                        result += CONSTANT_DOUBLE_NEW_LINE;
-                                        break;
-                                    }
-                                    if (node.getAttribute("id") === "main-toc") {
-                                        if (enableTOC) {
-                                            result += `**目录**\n\n[TOC]\n\n`;
-                                        }
-                                        break;
-                                    }
-                                    let text = await processChildren(node, listLevel);
-                                    if (style) {
-                                        if (style.includes("padding-left")) {
-                                            break;
-                                        }
-                                        if (style.includes("text-align:center")) {
-                                            text = `<div style="text-align:center;">${Utils.shrinkHtml(
-                                                node.innerHTML
-                                            )}</div>\n\n`;
-                                        } else if (style.includes("text-align:right")) {
-                                            text = `<div style="text-align:right;">${Utils.shrinkHtml(
-                                                node.innerHTML
-                                            )}</div>\n\n`;
-                                        } else if (style.includes("text-align:justify")) {
-                                            text += "\n\n";
-                                        } else {
-                                            text += "\n\n";
-                                        }
-                                    } else {
-                                        text += "\n\n";
-                                    }
-                                    result += text;
-                                }
-                                break;
-                            case "strong":
-                            case "b":
-                                result += `${SEPARATION_BEAUTIFICATION}**${SpecialTrim(
-                                    await processChildren(node, listLevel)
-                                )}**${SEPARATION_BEAUTIFICATION}`;
-                                break;
-                            case "em":
-                            case "i":
-                                result += `${SEPARATION_BEAUTIFICATION}*${SpecialTrim(
-                                    await processChildren(node, listLevel)
-                                )}*${SEPARATION_BEAUTIFICATION}`;
-                                break;
-                            case "u":
-                                result += `${SEPARATION_BEAUTIFICATION}<u>${SpecialTrim(
-                                    await processChildren(node, listLevel)
-                                )}</u>${SEPARATION_BEAUTIFICATION}`;
-                                break;
-                            case "s":
-                            case "strike":
-                                result += `${SEPARATION_BEAUTIFICATION}~~${SpecialTrim(
-                                    await processChildren(node, listLevel)
-                                )}~~${SEPARATION_BEAUTIFICATION}`;
-                                break;
-                            case "a":
-                                {
-                                    const node_class = node.getAttribute("class");
-                                    if (node_class && node_class.includes("footnote-backref")) {
-                                        break;
-                                    }
-                                    const href = node.getAttribute("href") || "";
-                                    if (node_class && node_class.includes("has-card")) {
-                                        const desc = node.title || "";
-                                        result += `[${desc}](${href}) `;
-                                        break;
-                                    }
-                                    const text = await processChildren(node, listLevel);
-                                    if (
-                                        href.includes("https://so.csdn.net/so/search") &&
-                                        GM_getValue("removeCSDNSearchLink")
-                                    ) {
-                                        result += `${text}`;
-                                        break;
-                                    }
-                                    result += `${SEPARATION_BEAUTIFICATION}[${text}](${href})${SEPARATION_BEAUTIFICATION}`;
-                                }
-                                break;
-                            case "img":
-                                {
-                                    let src = node.getAttribute("src") || "";
-                                    const alt = node.getAttribute("alt") || "";
-                                    const cls = node.getAttribute("class") || "";
-                                    const width = node.getAttribute("width") || "";
-                                    const height = node.getAttribute("height") || "";
-
-                                    if (cls.includes("mathcode")) {
-                                        result += `${SEPARATION_BEAUTIFICATION}\$\$\n${alt}\n\$\$`;
-                                    } else {
-                                        if (src.includes("#pic_center") || GM_getValue("forceImageCentering")) {
-                                            result += CONSTANT_DOUBLE_NEW_LINE;
-                                        } else {
-                                            result += " ";
-                                        }
-                                        if (GM_getValue("saveWebImages")) {
-                                            src = await this.fileManager.saveWebImageToLocal(
-                                                src,
-                                                mdAssetDirName,
-                                                img_prefix
-                                            );
-                                        }
-                                        if (height && GM_getValue("enableImageSize")) {
-                                            // 如果 height 是数字，则添加 px
-                                            // 如果带有单位，则直接使用
-                                            const heightValue = height.replace(/[^0-9]/g, "");
-                                            const heightUnit = height.replace(/[0-9]/g, "") || "px";
-                                            const heightStyle = heightValue
-                                                ? `max-height:${heightValue}${heightUnit};`
-                                                : "";
-                                            result += `<img src="${src}" alt="${alt}" style="${heightStyle} box-sizing:content-box;" />`;
-                                        } else if (width && GM_getValue("enableImageSize")) {
-                                            // 如果 width 是数字，则添加 px
-                                            // 如果带有单位，则直接使用
-                                            const widthValue = width.replace(/[^0-9]/g, "");
-                                            const widthUnit = width.replace(/[0-9]/g, "") || "px";
-                                            const widthStyle = widthValue ? `max-width:${widthValue}${widthUnit};` : "";
-                                            result += `<img src="${src}" alt="${alt}" style="${widthStyle} box-sizing:content-box;" />`;
-                                        } else {
-                                            result += `![${alt}](${src})`;
-                                        }
-                                        result += CONSTANT_DOUBLE_NEW_LINE;
-                                    }
-                                }
-                                break;
-                            case "ul":
-                                result += await processList(node, listLevel, false);
-                                break;
-                            case "ol":
-                                result += await processList(node, listLevel, true);
-                                break;
-                            case "blockquote":
-                                {
-                                    const text = (await processChildren(node, listLevel))
-                                        .trim()
-                                        .split("\n")
-                                        .map((line) => (line ? `> ${line}` : "> "))
-                                        .join("\n");
-                                    result += `${text}\n\n`;
-                                }
-                                break;
-                            case "pre":
-                                {
-                                    const codeNode = node.querySelector("code");
-                                    if (codeNode) {
-                                        const className = codeNode.className || "";
-                                        let language = "";
-                                        // 新版本的代码块，class含有language-xxx
-                                        if (className.includes("language-")) {
-                                            const languageMatch = className.split(" ");
-                                            // 找到第一个language-开头的字符串
-                                            for (const item of languageMatch) {
-                                                if (item.startsWith("language-")) {
-                                                    language = item;
-                                                    break;
-                                                }
-                                            }
-                                            language = language.replace("language-", "");
-                                        }
-                                        // 老版本的代码块
-                                        else if (className.startsWith("hljs")) {
-                                            const languageMatch = className.split(" ");
-                                            language = languageMatch ? languageMatch[1] : "";
-                                        }
-                                        result += `\`\`\`${language}\n${await processCodeBlock(codeNode)}\`\`\`\n\n`;
-                                    } else {
-                                        console.warn("Code block without <code> element:", node.outerHTML);
-                                        const codeText = node.textContent.replace(/^\s+|\s+$/g, "");
-                                        result += `\`\`\`\n${codeText}\n\`\`\`\n\n`;
-                                    }
-                                }
-                                break;
-                            case "code":
-                                {
-                                    const codeText = node.textContent;
-                                    result += `${SEPARATION_BEAUTIFICATION}\`${codeText}\`${SEPARATION_BEAUTIFICATION}`;
-                                }
-                                break;
-                            case "hr":
-                                if (node.getAttribute("id") !== "hr-toc") {
-                                    result += `---\n\n`;
-                                }
-                                break;
-                            case "br":
-                                result += `\n`;
-                                break;
-                            case "table":
-                                result += (await processTable(node)) + "\n\n";
-                                break;
-                            case "div":
-                                {
-                                    const className = node.getAttribute("class") || "";
-                                    if (className.includes("csdn-video-box")) {
-                                        const iframe = node.querySelector("iframe");
-                                        const src = iframe.getAttribute("src") || "";
-                                        const title = node.querySelector("p").textContent || "";
-                                        const iframeHTML = iframe.outerHTML.replace(
-                                            "></iframe>",
-                                            ' style="width: 100%; aspect-ratio: 2;"></iframe>'
-                                        );
-                                        result += `<div align="center" style="border: 3px solid gray;border-radius: 27px;overflow: hidden;"> <a class="link-info" href="${src}" rel="nofollow" title="${title}">${title}</a>${iframeHTML}</div>\n\n`;
-                                    } else if (className.includes("toc")) {
-                                        const customTitle = node.querySelector("h4")?.textContent || "";
-                                        if (enableTOC) {
-                                            result += `**${customTitle}**\n\n[TOC]\n\n`;
-                                        }
-                                    } else {
-                                        result += `${await processChildren(node, listLevel)}\n`;
-                                    }
-                                }
-                                break;
-                            case "span":
-                                {
-                                    const node_class = node.getAttribute("class");
-                                    if (node_class) {
-                                        if (
-                                            node_class.includes("katex--inline") ||
-                                            node_class.includes("katex--display")
-                                        ) {
-                                            const katex_mathml_elem = node.querySelector(".katex-mathml");
-                                            const katex_html_elem = node.querySelector(".katex-html");
-                                            if (katex_mathml_elem !== null && katex_html_elem !== null) {
-                                                // 移除.katex-mathml里的.MathJax_Display类，否则会造成错乱
-                                                if (
-                                                    katex_mathml_elem.querySelector(".MathJax_Display") &&
-                                                    katex_mathml_elem.querySelector("script")
-                                                ) {
-                                                    katex_mathml_elem
-                                                        .querySelectorAll(".MathJax_Display")
-                                                        .forEach((elem) => elem.remove());
-                                                }
-                                                if (
-                                                    katex_mathml_elem.querySelector(".MathJax_Preview") &&
-                                                    katex_mathml_elem.querySelector("script")
-                                                ) {
-                                                    katex_mathml_elem
-                                                        .querySelectorAll(".MathJax_Preview")
-                                                        .forEach((elem) => elem.remove());
-                                                }
-                                                if (
-                                                    katex_mathml_elem.querySelector(".MathJax_Error") &&
-                                                    katex_mathml_elem.querySelector("script")
-                                                ) {
-                                                    katex_mathml_elem
-                                                        .querySelectorAll(".MathJax_Error")
-                                                        .forEach((elem) => elem.remove());
-                                                }
-
-                                                const mathml = Utils.clearSpecialChars(katex_mathml_elem.textContent);
-                                                const katex_html = Utils.clearSpecialChars(katex_html_elem.textContent);
-                                                if (node_class.includes("katex--inline")) {
-                                                    if (mathml.startsWith(katex_html)) {
-                                                        result += `${SEPARATION_BEAUTIFICATION}\$${mathml.replace(
-                                                            katex_html,
-                                                            ""
-                                                        )}\$${SEPARATION_BEAUTIFICATION}`;
-                                                    } else {
-                                                        result += `${SEPARATION_BEAUTIFICATION}\$${Utils.clearKatexMathML(
-                                                            katex_mathml_elem.textContent
-                                                        )}\$${SEPARATION_BEAUTIFICATION}`;
-                                                    }
-                                                } else {
-                                                    if (mathml.startsWith(katex_html)) {
-                                                        result += `${CONSTANT_DOUBLE_NEW_LINE}\$\$\n${mathml.replace(
-                                                            katex_html,
-                                                            ""
-                                                        )}\n\$\$${CONSTANT_DOUBLE_NEW_LINE}`;
-                                                    } else {
-                                                        result += `${CONSTANT_DOUBLE_NEW_LINE}\$\$\n${Utils.clearKatexMathML(
-                                                            katex_mathml_elem.textContent
-                                                        )}\n\$\$${CONSTANT_DOUBLE_NEW_LINE}`;
-                                                    }
-                                                }
-                                            }
-                                            break;
-                                        }
-                                    }
-                                    const style = node.getAttribute("style") || "";
-                                    if (
-                                        (style.includes("background-color") || style.includes("color")) &&
-                                        GM_getValue("enableColorText")
-                                    ) {
-                                        result += `<span style="${style}">${await processChildren(
-                                            node,
-                                            listLevel
-                                        )}</span>`;
-                                    } else {
-                                        result += await processChildren(node, listLevel);
-                                    }
-                                }
-                                break;
-                            case "kbd":
-                                result += `${SEPARATION_BEAUTIFICATION}<kbd>${node.textContent}</kbd>${SEPARATION_BEAUTIFICATION}`;
-                                break;
-                            case "mark":
-                                result += `${SEPARATION_BEAUTIFICATION}<mark>${await processChildren(
-                                    node,
-                                    listLevel
-                                )}</mark>${SEPARATION_BEAUTIFICATION}`;
-                                break;
-                            case "sub":
-                                result += `<sub>${await processChildren(node, listLevel)}</sub>`;
-                                break;
-                            case "sup":
-                                {
-                                    const node_class = node.getAttribute("class");
-                                    if (node_class && node_class.includes("footnote-ref")) {
-                                        result += `[^${node.textContent}]`;
-                                    } else {
-                                        result += `<sup>${await processChildren(node, listLevel)}</sup>`;
-                                    }
-                                }
-                                break;
-                            case "svg":
-                                {
-                                    const style = node.getAttribute("style");
-                                    if (style && style.includes("display: none")) {
-                                        break;
-                                    }
-                                    // 为foreignObject里的div添加属性xmlns="http://www.w3.org/1999/xhtml"，否则typora无法识别
-                                    const foreignObjects = node.querySelectorAll("foreignObject");
-                                    for (const foreignObject of foreignObjects) {
-                                        const divs = foreignObject.querySelectorAll("div");
-                                        divs.forEach((div) => {
-                                            div.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
-                                        });
-                                    }
-                                    if (GM_getValue("saveWebImages")) {
-                                        const svgSavePath = await this.fileManager.saveSvgToLocal(
-                                            node.outerHTML,
-                                            mdAssetDirName,
-                                            img_prefix
-                                        );
-                                        result += `![](${svgSavePath})${CONSTANT_DOUBLE_NEW_LINE}`;
-                                    } else {
-                                        // 检查是否有style标签存在于svg元素内，如果有则转换为base64形式
-                                        if (node.querySelector("style")) {
-                                            // 将SVG转换为base64编码
-                                            const base64 = Utils.svgToBase64(node.outerHTML);
-                                            result += `![](data:image/svg+xml;base64,${base64})${CONSTANT_DOUBLE_NEW_LINE}`;
-                                        } else {
-                                            result += `<div align="center">${node.outerHTML}</div>${CONSTANT_DOUBLE_NEW_LINE}`;
-                                        }
-                                    }
-                                }
-                                break;
-                            case "section": // 这个是注脚的内容
-                                {
-                                    const node_class = node.getAttribute("class");
-                                    if (node_class && node_class.includes("footnotes")) {
-                                        result += await processFootnotes(node);
-                                    }
-                                }
-                                break;
-                            case "input":
-                                // 仅处理checkbox类型的input元素
-                                if (node.getAttribute("type") === "checkbox") {
-                                    result += `[${node.checked ? "x" : " "}] `;
-                                }
-                                break;
-                            case "dl":
-                                // 自定义列表，直接用html
-                                result += `${Utils.shrinkHtml(node.outerHTML)}\n\n`;
-                                break;
-                            case "abbr":
-                                result += `${Utils.shrinkHtml(node.outerHTML)}`;
-                                break;
-                            case "font":
-                                // 避免进入 default : https://blog.csdn.net/azhengye/article/details/8481846
-                                result += await processChildren(node, listLevel);
-                                break;
-                            case "td":
-                            case "th":
-                                // 处理表格单元格
-                                result += await processChildren(node, listLevel);
-                                break;
-                            case "center":
-                                // 处理居中标签
-                                if (node.childNodes.length === 1 && node.childNodes[0].nodeType === TEXT_NODE) {
-                                    result += `<center>${node.textContent.trim().replace("\n", "<br>")}</center>\n\n`;
-                                } else {
-                                    node.childNodes.forEach((child) => {
-                                        if (child.nodeType === ELEMENT_NODE && child.tagName.toLowerCase() === "img") {
-                                            if (!child.getAttribute("src").includes("#pic_center")) {
-                                                child.setAttribute("src", child.getAttribute("src") + "#pic_center");
-                                            }
-                                        }
-                                    });
-                                    result += await processChildren(node, listLevel);
-                                    result += CONSTANT_DOUBLE_NEW_LINE;
-                                }
-                                break;
-                            default:
-                                result += await processChildren(node, listLevel);
-                                result += CONSTANT_DOUBLE_NEW_LINE;
-                                break;
+            // 按行分割分别处理
+            // 如果该行内容不为空且不包含图片，则添加标题前缀
+            content = content
+                .split("\n")
+                .map((line) => {
+                    if (line.trim() !== "") {
+                        // 如果该行内容是 <img /> 标签，则不添加前缀
+                        if (line.trim().search("<img") !== -1 && line.trim().search("/>") !== -1) {
+                            return line;
                         }
-                        break;
-                    case TEXT_NODE:
-                        // 处理文本节点（即没有被单独的标签包裹的文本）
-                        result += escapeMarkdown(node.textContent);
-                        break;
-                    case COMMENT_NODE:
-                        // 忽略注释
-                        break;
-                    default:
-                        break;
-                }
-                return result;
-            };
-
-            /**
-             * 处理给定节点的子节点
-             * @param {Node} node - 父节点
-             * @param {number} listLevel - 当前列表嵌套级别
-             * @returns {Promise<string>} 子节点拼接后的Markdown字符串
-             */
-            const processChildren = async (node, listLevel) => {
-                let text = "";
-                for (const child of node.childNodes) {
-                    text += await processNode(child, listLevel);
-                }
-                return text;
-            };
-
-            /**
-             * 处理列表元素
-             * @param {Element} node - 列表元素
-             * @param {number} listLevel - 当前列表嵌套级别
-             * @param {boolean} ordered - 列表是否有序
-             * @returns {Promise<string>} 列表的Markdown字符串
-             */
-            const processList = async (node, listLevel, ordered) => {
-                let text = CONSTANT_DOUBLE_NEW_LINE;
-                const children = Array.from(node.children).filter((child) => child.tagName.toLowerCase() === "li");
-                for (let index = 0; index < children.length; index++) {
-                    const child = children[index];
-
-                    let prefix = ordered ? `${index + 1}. ` : `- `;
-                    let indent = ordered ? "   " : "  ";
-
-                    let childText = `${await processChildren(child, listLevel + 1)}`;
-
-                    // 由于缩进，这里必须先替换掉 CONSTANT_DOUBLE_NEW_LINE
-                    childText = childText.replace(RE_DOUBLE_NL, "\n\n");
-
-                    childText = childText
-                        .split("\n")
-                        .map((line, index) => {
-                            // 如果是空行，则不添加缩进
-                            if (line.trim() === "" || index === 0) {
-                                return line;
-                            }
-                            // 否则添加缩进
-                            return `${indent}${line}`;
-                        })
-                        .join("\n");
-
-                    text += `${prefix}${childText}${CONSTANT_DOUBLE_NEW_LINE}`;
-                }
-                // text += `\n`;
-                return text;
-            };
-
-            /**
-             * 处理表格
-             * @param {Element} node - 包含表格的元素
-             * @returns {Promise<string>} 表格的Markdown字符串
-             */
-            const processTable = async (node) => {
-                const rows = Array.from(node.querySelectorAll("tr"));
-                if (rows.length === 0) return "";
-
-                let table = "";
-
-                // 处理表头
-                const headerCells = Array.from(rows[0].querySelectorAll("th, td"));
-                const headers = await Promise.all(
-                    headerCells.map(async (cell) => (await processNode(cell)).trim().replaceAll(RE_DOUBLE_NL, "<br />"))
-                );
-                table += `| ${headers.join(" | ")} |\n`;
-
-                // 处理分隔符
-                const alignments = headerCells.map((cell) => {
-                    const align = cell.getAttribute("align");
-                    if (align === "center") {
-                        return ":---:";
-                    } else if (align === "right") {
-                        return "---:";
-                    } else if (align === "left") {
-                        return ":---";
-                    } else {
-                        return ":---:";
+                        return `${"#".repeat(level)} ${line}`;
                     }
-                });
-                table += `|${alignments.join("|")}|\n`;
+                    return line;
+                })
+                .join("\n");
 
-                // 处理表格内容
-                for (let i = 1; i < rows.length; i++) {
-                    const cells = Array.from(rows[i].querySelectorAll("td"));
-                    const row = await Promise.all(
-                        cells.map(async (cell) => (await processNode(cell)).trim().replaceAll(RE_DOUBLE_NL, "<br />"))
-                    );
-                    table += `| ${row.join(" | ")} |`;
-                    if (i < rows.length - 1) {
-                        table += "\n";
-                    }
-                }
-                return table;
-            };
+            return `${content}${this.CONSTANT_DOUBLE_NEW_LINE}`;
+        }
 
-            /**
-             * 处理代码块
-             * @param {Element} codeNode - 包含代码的元素
-             * @returns {Promise<string>} 代码块的Markdown字符串
-             */
-            const processCodeBlock = async (codeNode) => {
-                // 查找code内部是否有ol元素
-                const node = codeNode.querySelector("ol");
+        /**
+         * 处理段落元素
+         */
+        async handleParagraph(node, context) {
+            const cls = node.getAttribute("class");
+            const style = node.getAttribute("style");
 
-                // 确保传入的节点是一个<ol>元素
-                if (!node || node.tagName.toLowerCase() !== "ol") {
-                    // 如果没有ol元素，则说明是老版本，直接返回codeNode的textContent
-                    return codeNode.textContent.replace(/\n$/, "") + "\n";
-                }
-
-                // 获取所有<li>子元素
-                const listItems = node.querySelectorAll("li");
-                let result = "";
-
-                // 遍历每个<li>元素
-                listItems.forEach((li) => {
-                    result += li.textContent;
-                    result += "\n";
-                });
-
-                return result;
-            };
-
-            /**
-             * 处理脚注
-             * @param {Element} node - 包含脚注的元素
-             * @returns {Promise<string>} 脚注的Markdown字符串
-             */
-            const processFootnotes = async (node) => {
-                const footnotes = Array.from(node.querySelectorAll("li"));
-                let result = "";
-
-                for (let index = 0; index < footnotes.length; index++) {
-                    const li = footnotes[index];
-                    const text = (await processNode(li)).replaceAll("\n", " ").replaceAll("↩︎", "").trim();
-                    result += `[^${index + 1}]: ${text}\n`;
-                }
-
-                return result;
-            };
-
-            let markdown = "";
-            for (const child of articleElement.childNodes) {
-                markdown += await processNode(child);
+            if (cls && cls.includes("img-center")) {
+                // 处理图片居中，类似 <center> 标签
+                this.addPicCenterToImages(node);
+                return (await this.processChildren(node, context)) + this.CONSTANT_DOUBLE_NEW_LINE;
             }
-            markdown = markdown.trim();
 
-            markdown = markdown
-                .replaceAll(RE_DOUBLE_NL, "\n\n") // 1. 吃掉前后重复换行和标记，统一为两个换行
-                .replaceAll(RE_SEP_NOLINE, " ") // 2.a 非换行前的标记串 → 空格
-                .replaceAll(RE_SEP_WITHNL, "$1"); // 2.b 换行后的标记串 → 保留换行
+            // 处理目录
+            if (node.getAttribute("id") === "main-toc") {
+                if (context.enableTOC) {
+                    return `**目录**\n\n[TOC]\n\n`;
+                }
+                return "";
+            }
 
-            return markdown;
+            let text = await this.processChildren(node, context);
+
+            // 处理带样式的段落
+            if (style) {
+                if (style.includes("padding-left")) {
+                    return "";
+                }
+                if (style.includes("text-align:center")) {
+                    return `<div style="text-align:center;">${Utils.shrinkHtml(node.innerHTML)}</div>\n\n`;
+                } else if (style.includes("text-align:right")) {
+                    return `<div style="text-align:right;">${Utils.shrinkHtml(node.innerHTML)}</div>\n\n`;
+                }
+            }
+
+            return `${text}\n\n`;
+        }
+
+        /**
+         * 处理加粗元素
+         */
+        async handleStrong(node, context) {
+            const content = await this.processChildren(node, context);
+            return `${this.SEPARATION_BEAUTIFICATION}**${this.specialTrim(content)}**${this.SEPARATION_BEAUTIFICATION}`;
+        }
+
+        /**
+         * 处理斜体元素
+         */
+        async handleEmphasis(node, context) {
+            const content = await this.processChildren(node, context);
+            return `${this.SEPARATION_BEAUTIFICATION}*${this.specialTrim(content)}*${this.SEPARATION_BEAUTIFICATION}`;
+        }
+
+        /**
+         * 处理下划线元素
+         */
+        async handleUnderline(node, context) {
+            const content = await this.processChildren(node, context);
+            return `${this.SEPARATION_BEAUTIFICATION}<u>${this.specialTrim(content)}</u>${
+                this.SEPARATION_BEAUTIFICATION
+            }`;
+        }
+
+        /**
+         * 处理删除线元素
+         */
+        async handleStrikethrough(node, context) {
+            const content = await this.processChildren(node, context);
+            return `${this.SEPARATION_BEAUTIFICATION}~~${this.specialTrim(content)}~~${this.SEPARATION_BEAUTIFICATION}`;
+        }
+
+        /**
+         * 处理链接元素
+         */
+        async handleAnchor(node, context) {
+            const nodeClass = node.getAttribute("class");
+            // 忽略脚注返回链接
+            if (nodeClass && nodeClass.includes("footnote-backref")) {
+                return "";
+            }
+
+            const href = node.getAttribute("href") || "";
+            // 处理卡片链接
+            if (nodeClass && nodeClass.includes("has-card")) {
+                const desc = node.title || "";
+                return `[${desc}](${href}) `;
+            }
+
+            const text = await this.processChildren(node, context);
+            // 处理CSDN搜索链接
+            if (href.includes("https://so.csdn.net/so/search") && context.removeCSDNSearchLink) {
+                return text;
+            }
+            return `${this.SEPARATION_BEAUTIFICATION}[${text}](${href})${this.SEPARATION_BEAUTIFICATION}`;
+        }
+
+        /**
+         * 处理图片元素
+         */
+        async handleImage(node, context) {
+            let src = node.getAttribute("src") || "";
+            const alt = node.getAttribute("alt") || "";
+            const cls = node.getAttribute("class") || "";
+            const width = node.getAttribute("width") || "";
+            const height = node.getAttribute("height") || "";
+            let result = "";
+
+            // 处理数学代码图片
+            if (cls.includes("mathcode")) {
+                return `${this.SEPARATION_BEAUTIFICATION}\$\$\n${alt}\n\$\$`;
+            } else {
+                // 根据图片是否居中添加空格
+                if (src.includes("#pic_center") || context.forceImageCentering) {
+                    result = this.CONSTANT_DOUBLE_NEW_LINE;
+                } else {
+                    result = " ";
+                }
+
+                // 保存网络图片到本地（如果配置启用）
+                if (context.saveWebImages) {
+                    src = await this.fileManager.saveWebImageToLocal(src, context.assetDirName, context.imgPrefix);
+                }
+
+                // 处理图片尺寸
+                if (height && context.enableImageSize) {
+                    // 如果 height 是数字，则添加 px；如果带有单位，则直接使用
+                    const heightValue = height.replace(/[^0-9]/g, "");
+                    const heightUnit = height.replace(/[0-9]/g, "") || "px";
+                    const heightStyle = heightValue ? `max-height:${heightValue}${heightUnit};` : "";
+                    result += `<img src="${src}" alt="${alt}" style="${heightStyle} box-sizing:content-box;" />`;
+                } else if (width && context.enableImageSize) {
+                    // 如果 width 是数字，则添加 px；如果带有单位，则直接使用
+                    const widthValue = width.replace(/[^0-9]/g, "");
+                    const widthUnit = width.replace(/[0-9]/g, "") || "px";
+                    const widthStyle = widthValue ? `max-width:${widthValue}${widthUnit};` : "";
+                    result += `<img src="${src}" alt="${alt}" style="${widthStyle} box-sizing:content-box;" />`;
+                } else {
+                    result += `![${alt}](${src})`;
+                }
+
+                return result + this.CONSTANT_DOUBLE_NEW_LINE;
+            }
+        }
+
+        /**
+         * 处理列表元素（ul/ol）
+         */
+        async handleList(node, context) {
+            const ordered = node.tagName.toLowerCase() === "ol";
+            // 创建新的上下文，增加列表嵌套级别
+            const newContext = { ...context, listLevel: context.listLevel + 1 };
+
+            let result = this.CONSTANT_DOUBLE_NEW_LINE;
+            // 筛选出所有li元素
+            const children = Array.from(node.children).filter((child) => child.tagName.toLowerCase() === "li");
+
+            for (let index = 0; index < children.length; index++) {
+                const child = children[index];
+
+                // 根据列表类型选择前缀和缩进
+                const prefix = ordered ? `${index + 1}. ` : `- `;
+                const indent = ordered ? "   " : "  ";
+
+                let childText = await this.processChildren(child, newContext);
+
+                // 处理嵌套列表的换行和缩进
+                const DDNL = this.escapeRegExp(this.CONSTANT_DOUBLE_NEW_LINE);
+                const RE_DOUBLE_NL = new RegExp(`(?:\\n|${DDNL})*${DDNL}(?:\\n|${DDNL})*`, "g");
+                childText = childText.replace(RE_DOUBLE_NL, "\n\n");
+
+                // 对除第一行外的所有行添加缩进
+                childText = childText
+                    .split("\n")
+                    .map((line, i) => {
+                        // 如果是空行或首行，则不添加缩进
+                        if (line.trim() === "" || i === 0) {
+                            return line;
+                        }
+                        return `${indent}${line}`;
+                    })
+                    .join("\n");
+
+                result += `${prefix}${childText}${this.CONSTANT_DOUBLE_NEW_LINE}`;
+            }
+
+            return result;
+        }
+
+        /**
+         * 处理引用块元素
+         */
+        async handleBlockquote(node, context) {
+            // 处理每一行，添加引用标记 >
+            const text = (await this.processChildren(node, context))
+                .trim()
+                .split("\n")
+                .map((line) => (line ? `> ${line}` : "> "))
+                .join("\n");
+
+            return `${text}\n\n`;
+        }
+
+        /**
+         * 处理预格式化代码块
+         */
+        async handlePreformatted(node, context) {
+            const codeNode = node.querySelector("code");
+            if (codeNode) {
+                const className = codeNode.className || "";
+                let language = "";
+
+                // 提取语言信息
+                // 新版本的代码块，class含有language-xxx
+                if (className.includes("language-")) {
+                    for (const item of className.split(" ")) {
+                        if (item.startsWith("language-")) {
+                            language = item.replace("language-", "");
+                            break;
+                        }
+                    }
+                }
+                // 老版本的代码块
+                else if (className.startsWith("hljs")) {
+                    const languageMatch = className.split(" ");
+                    language = languageMatch.length > 1 ? languageMatch[1] : "";
+                }
+
+                return `\`\`\`${language}\n${await this.processCodeBlock(codeNode)}\`\`\`\n\n`;
+            } else {
+                console.warn("代码块没有 <code> 元素:", node.outerHTML);
+                const codeText = node.textContent.replace(/^\s+|\s+$/g, "");
+                return `\`\`\`\n${codeText}\n\`\`\`\n\n`;
+            }
+        }
+
+        /**
+         * 处理行内代码元素
+         */
+        async handleCode(node, context) {
+            const codeText = node.textContent;
+            return `${this.SEPARATION_BEAUTIFICATION}\`${codeText}\`${this.SEPARATION_BEAUTIFICATION}`;
+        }
+
+        /**
+         * 处理水平分割线元素
+         */
+        async handleHorizontalRule(node, context) {
+            if (node.getAttribute("id") !== "hr-toc") {
+                return `---\n\n`;
+            }
+            return "";
+        }
+
+        /**
+         * 处理换行元素
+         */
+        async handleLineBreak(node, context) {
+            return `\n`;
+        }
+
+        /**
+         * 处理表格元素
+         */
+        async handleTable(node, context) {
+            const rows = Array.from(node.querySelectorAll("tr"));
+            if (rows.length === 0) return "";
+
+            let table = "";
+
+            // 处理表头
+            const headerCells = Array.from(rows[0].querySelectorAll("th, td"));
+            const DDNL = this.escapeRegExp(this.CONSTANT_DOUBLE_NEW_LINE);
+            const RE_DOUBLE_NL = new RegExp(`(?:\\n|${DDNL})*${DDNL}(?:\\n|${DDNL})*`, "g");
+
+            const headers = await Promise.all(
+                headerCells.map(async (cell) => {
+                    const content = await this.processNode(cell, context);
+                    return content.trim().replaceAll(RE_DOUBLE_NL, "<br />");
+                })
+            );
+
+            table += `| ${headers.join(" | ")} |\n`;
+
+            // 处理分隔符行（对齐方式）
+            const alignments = headerCells.map((cell) => {
+                const align = cell.getAttribute("align");
+                if (align === "center") return ":---:";
+                if (align === "right") return "---:";
+                if (align === "left") return ":---";
+                return ":---:"; // 默认居中
+            });
+
+            table += `|${alignments.join("|")}|\n`;
+
+            // 处理表格内容行
+            for (let i = 1; i < rows.length; i++) {
+                const cells = Array.from(rows[i].querySelectorAll("td"));
+                const rowContent = await Promise.all(
+                    cells.map(async (cell) => {
+                        const content = await this.processNode(cell, context);
+                        return content.trim().replaceAll(RE_DOUBLE_NL, "<br />");
+                    })
+                );
+
+                table += `| ${rowContent.join(" | ")} |`;
+                if (i < rows.length - 1) {
+                    table += "\n";
+                }
+            }
+
+            return table + "\n\n";
+        }
+
+        /**
+         * 处理div元素
+         */
+        async handleDiv(node, context) {
+            const className = node.getAttribute("class") || "";
+
+            // 处理视频盒子
+            if (className.includes("csdn-video-box")) {
+                const iframe = node.querySelector("iframe");
+                if (iframe) {
+                    const src = iframe.getAttribute("src") || "";
+                    const titleElem = node.querySelector("p");
+                    const title = titleElem ? titleElem.textContent || "" : "";
+
+                    const iframeHTML = iframe.outerHTML.replace(
+                        "></iframe>",
+                        ' style="width: 100%; aspect-ratio: 2;"></iframe>'
+                    );
+
+                    return `<div align="center" style="border: 3px solid gray;border-radius: 27px;overflow: hidden;"> <a class="link-info" href="${src}" rel="nofollow" title="${title}">${title}</a>${iframeHTML}</div>\n\n`;
+                }
+            }
+            // 处理目录
+            else if (className.includes("toc")) {
+                if (context.enableTOC) {
+                    const titleElem = node.querySelector("h4");
+                    const customTitle = titleElem ? titleElem.textContent || "" : "";
+                    return `**${customTitle}**\n\n[TOC]\n\n`;
+                }
+            }
+
+            return `${await this.processChildren(node, context)}\n`;
+        }
+
+        /**
+         * 处理span元素
+         */
+        async handleSpan(node, context) {
+            const nodeClass = node.getAttribute("class");
+
+            // 处理KaTeX数学公式
+            if (nodeClass) {
+                if (nodeClass.includes("katex--inline") || nodeClass.includes("katex--display")) {
+                    return this.handleKatexElement(node, nodeClass);
+                }
+            }
+
+            // 处理带颜色的文本
+            const style = node.getAttribute("style") || "";
+            if ((style.includes("background-color") || style.includes("color")) && context.enableColorText) {
+                return `<span style="${style}">${await this.processChildren(node, context)}</span>`;
+            }
+
+            return await this.processChildren(node, context);
+        }
+
+        /**
+         * 处理KaTeX数学公式元素
+         */
+        handleKatexElement(node, nodeClass) {
+            const katexMathmlElem = node.querySelector(".katex-mathml");
+            const katexHtmlElem = node.querySelector(".katex-html");
+
+            if (!katexMathmlElem || !katexHtmlElem) return "";
+
+            // 清理KaTeX元素
+            this.cleanKatexElements(katexMathmlElem);
+
+            const mathml = Utils.clearSpecialChars(katexMathmlElem.textContent);
+            const katexHtml = Utils.clearSpecialChars(katexHtmlElem.textContent);
+
+            // 处理行内公式和行间公式
+            if (nodeClass.includes("katex--inline")) {
+                // 行内公式
+                if (mathml.startsWith(katexHtml)) {
+                    return `${this.SEPARATION_BEAUTIFICATION}\$${mathml.replace(katexHtml, "")}\$${
+                        this.SEPARATION_BEAUTIFICATION
+                    }`;
+                } else {
+                    return `${this.SEPARATION_BEAUTIFICATION}\$${Utils.clearKatexMathML(
+                        katexMathmlElem.textContent
+                    )}\$${this.SEPARATION_BEAUTIFICATION}`;
+                }
+            } else {
+                // 行间公式
+                if (mathml.startsWith(katexHtml)) {
+                    return `${this.CONSTANT_DOUBLE_NEW_LINE}\$\$\n${mathml.replace(katexHtml, "")}\n\$\$${
+                        this.CONSTANT_DOUBLE_NEW_LINE
+                    }`;
+                } else {
+                    return `${this.CONSTANT_DOUBLE_NEW_LINE}\$\$\n${Utils.clearKatexMathML(
+                        katexMathmlElem.textContent
+                    )}\n\$\$${this.CONSTANT_DOUBLE_NEW_LINE}`;
+                }
+            }
+        }
+
+        /**
+         * 清理KaTeX元素
+         * 移除可能导致公式显示错乱的元素
+         */
+        cleanKatexElements(katexMathmlElem) {
+            const elementsToRemove = [".MathJax_Display", ".MathJax_Preview", ".MathJax_Error"];
+
+            elementsToRemove.forEach((selector) => {
+                if (katexMathmlElem.querySelector(selector) && katexMathmlElem.querySelector("script")) {
+                    katexMathmlElem.querySelectorAll(selector).forEach((elem) => elem.remove());
+                }
+            });
+        }
+
+        /**
+         * 处理键盘按键元素
+         */
+        async handleKeyboard(node, context) {
+            return `${this.SEPARATION_BEAUTIFICATION}<kbd>${node.textContent}</kbd>${this.SEPARATION_BEAUTIFICATION}`;
+        }
+
+        /**
+         * 处理标记（高亮）元素
+         */
+        async handleMark(node, context) {
+            return `${this.SEPARATION_BEAUTIFICATION}<mark>${await this.processChildren(node, context)}</mark>${
+                this.SEPARATION_BEAUTIFICATION
+            }`;
+        }
+
+        /**
+         * 处理下标元素
+         */
+        async handleSubscript(node, context) {
+            return `<sub>${await this.processChildren(node, context)}</sub>`;
+        }
+
+        /**
+         * 处理上标元素
+         */
+        async handleSuperscript(node, context) {
+            const nodeClass = node.getAttribute("class");
+            // 处理脚注引用
+            if (nodeClass && nodeClass.includes("footnote-ref")) {
+                return `[^${node.textContent}]`;
+            } else {
+                return `<sup>${await this.processChildren(node, context)}</sup>`;
+            }
+        }
+
+        /**
+         * 处理SVG元素
+         */
+        async handleSvg(node, context) {
+            const style = node.getAttribute("style");
+            if (style && style.includes("display: none")) {
+                return "";
+            }
+
+            // 为foreignObject里的div添加属性xmlns="http://www.w3.org/1999/xhtml"，否则typora无法识别
+            const foreignObjects = node.querySelectorAll("foreignObject");
+            for (const foreignObject of foreignObjects) {
+                const divs = foreignObject.querySelectorAll("div");
+                divs.forEach((div) => {
+                    div.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+                });
+            }
+
+            // 保存SVG图像
+            if (context.saveWebImages) {
+                const svgSavePath = await this.fileManager.saveSvgToLocal(
+                    node.outerHTML,
+                    context.assetDirName,
+                    context.imgPrefix
+                );
+                return `![](${svgSavePath})${this.CONSTANT_DOUBLE_NEW_LINE}`;
+            } else {
+                // 检查是否有style标签存在于svg元素内，如果有则转换为base64形式
+                if (node.querySelector("style")) {
+                    const base64 = Utils.svgToBase64(node.outerHTML);
+                    return `![](data:image/svg+xml;base64,${base64})${this.CONSTANT_DOUBLE_NEW_LINE}`;
+                } else {
+                    return `<div align="center">${node.outerHTML}</div>${this.CONSTANT_DOUBLE_NEW_LINE}`;
+                }
+            }
+        }
+
+        /**
+         * 处理section元素
+         */
+        async handleSection(node, context) {
+            const nodeClass = node.getAttribute("class");
+            // 处理脚注内容
+            if (nodeClass && nodeClass.includes("footnotes")) {
+                return await this.processFootnotes(node);
+            }
+            return await this.processChildren(node, context);
+        }
+
+        /**
+         * 处理input元素
+         */
+        async handleInput(node, context) {
+            // 仅处理checkbox类型的input元素
+            if (node.getAttribute("type") === "checkbox") {
+                return `[${node.checked ? "x" : " "}] `;
+            }
+            return "";
+        }
+
+        /**
+         * 处理定义列表元素
+         */
+        async handleDefinitionList(node, context) {
+            // 自定义列表，直接用HTML
+            return `${Utils.shrinkHtml(node.outerHTML)}\n\n`;
+        }
+
+        /**
+         * 处理缩写元素
+         */
+        async handleAbbreviation(node, context) {
+            return Utils.shrinkHtml(node.outerHTML);
+        }
+
+        /**
+         * 处理字体元素
+         */
+        async handleFont(node, context) {
+            // 避免进入 default，直接处理子元素
+            return await this.processChildren(node, context);
+        }
+
+        /**
+         * 处理表格单元格元素
+         */
+        async handleTableCell(node, context) {
+            return await this.processChildren(node, context);
+        }
+
+        /**
+         * 处理居中元素
+         */
+        async handleCenter(node, context) {
+            if (node.childNodes.length === 1 && node.childNodes[0].nodeType === this.TEXT_NODE) {
+                // 只有一个文本子节点时，使用center标签
+                return `<center>${node.textContent.trim().replace("\n", "<br>")}</center>\n\n`;
+            } else {
+                // 处理含有图片的居中标签，为图片添加#pic_center后缀
+                this.addPicCenterToImages(node);
+                return (await this.processChildren(node, context)) + this.CONSTANT_DOUBLE_NEW_LINE;
+            }
+        }
+
+        /**
+         * 默认元素处理器，用于没有特定处理器的元素
+         */
+        async handleDefaultElement(node, context) {
+            return (await this.processChildren(node, context)) + this.CONSTANT_DOUBLE_NEW_LINE;
+        }
+
+        /****************************************
+         * 辅助方法
+         ****************************************/
+
+        /**
+         * 为图片添加#pic_center后缀以实现居中效果
+         */
+        addPicCenterToImages(node) {
+            node.querySelectorAll("img").forEach((img) => {
+                const src = img.getAttribute("src");
+                if (src && !src.includes("#pic_center")) {
+                    img.setAttribute("src", src + "#pic_center");
+                }
+            });
+        }
+
+        /**
+         * 处理代码块内容
+         * 支持新旧两种代码块格式
+         */
+        async processCodeBlock(codeNode) {
+            // 查找code内部是否有ol元素（新版代码块格式）
+            const olNode = codeNode.querySelector("ol");
+
+            if (!olNode || olNode.tagName.toLowerCase() !== "ol") {
+                // 老版本的代码块，直接返回文本内容
+                return codeNode.textContent.replace(/\n$/, "") + "\n";
+            }
+
+            // 新版本的代码块，处理每行代码
+            const listItems = olNode.querySelectorAll("li");
+            let result = "";
+
+            // 遍历每个<li>元素（每行代码）
+            listItems.forEach((li) => {
+                result += li.textContent + "\n";
+            });
+
+            return result;
+        }
+
+        /**
+         * 处理脚注
+         * 将脚注列表转换为Markdown格式
+         */
+        async processFootnotes(node) {
+            const footnotes = Array.from(node.querySelectorAll("li"));
+            let result = "";
+
+            for (let index = 0; index < footnotes.length; index++) {
+                const li = footnotes[index];
+                // 移除换行和返回符号，格式化脚注内容
+                const text = (await this.processNode(li, {})).replaceAll("\n", " ").replaceAll("↩︎", "").trim();
+
+                result += `[^${index + 1}]: ${text}\n`;
+            }
+
+            return result;
         }
     }
 
@@ -2156,16 +3034,35 @@
             }
             url = Utils.clearUrl(url);
 
-            let markdown = await this.markdownConverter.htmlToMarkdown(
-                htmlInput,
-                GM_getValue("mergeArticleContent") || GM_getValue("saveAllImagesToAssets")
-                    ? "assets"
-                    : GM_getValue("addSerialNumber")
-                    ? `${prefix}${articleTitle}`
-                    : `${articleTitle}`,
-                !GM_getValue("mergeArticleContent"),
-                GM_getValue("mergeArticleContent") || GM_getValue("saveAllImagesToAssets") ? prefix : ""
-            );
+            // let markdown = await this.markdownConverter.htmlToMarkdown(
+            //     htmlInput,
+            //     GM_getValue("mergeArticleContent") || GM_getValue("saveAllImagesToAssets")
+            //         ? "assets"
+            //         : GM_getValue("addSerialNumber")
+            //         ? `${prefix}${articleTitle}`
+            //         : `${articleTitle}`,
+            //     !GM_getValue("mergeArticleContent"),
+            //     GM_getValue("mergeArticleContent") || GM_getValue("saveAllImagesToAssets") ? prefix : ""
+            // );
+
+            let markdown = await this.markdownConverter.htmlToMarkdown(htmlInput, {
+                assetDirName: (() => {
+                    if (GM_getValue("mergeArticleContent") || GM_getValue("saveAllImagesToAssets")) {
+                        return "assets";
+                    } else if (GM_getValue("addSerialNumber")) {
+                        return `${prefix}${articleTitle}`;
+                    } else {
+                        return `${articleTitle}`;
+                    }
+                })(),
+                enableTOC: !GM_getValue("mergeArticleContent"),
+                imgPrefix: GM_getValue("mergeArticleContent") || GM_getValue("saveAllImagesToAssets") ? prefix : "",
+                saveWebImages: GM_getValue("saveWebImages"),
+                forceImageCentering: GM_getValue("forceImageCentering"),
+                enableImageSize: GM_getValue("enableImageSize"),
+                enableColorText: GM_getValue("enableColorText"),
+                removeCSDNSearchLink: GM_getValue("removeCSDNSearchLink"),
+            });
 
             if (GM_getValue("addArticleInfoInBlockquote")) {
                 markdown = `> ${articleInfo}\n> 文章链接：${url}\n\n${markdown}`;
@@ -2919,7 +3816,7 @@
             console.dir("已展开隐藏的文章内容。");
 
             // 动态等待 #article_content 加载完成
-            const articleContent = document_body.querySelector("#article_content"); 
+            const articleContent = document_body.querySelector("#article_content");
             if (!articleContent) {
                 throw new Error("未找到文章内容元素 #article_content");
             }
