@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         (dev) csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      3.1.0
+// @version      3.2.0
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -124,11 +124,18 @@
             let index = 0;
             for (const item of array) {
                 const currentIndex = index++;
-                const p = Promise.resolve().then(() => iteratorFn(item, currentIndex));
+                const p = new Promise(async (resolve, reject) => {
+                    try {
+                        await iteratorFn(item, currentIndex);
+                        resolve();
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
                 ret.push(p);
 
                 if (poolLimit <= array.length) {
-                    const e = p.then(() => executing.splice(executing.indexOf(e), 1));
+                    const e = p.finally(() => executing.splice(executing.indexOf(e), 1));
                     executing.push(e);
 
                     if (executing.length >= poolLimit) {
@@ -781,7 +788,7 @@
          */
         createOptionGroups(container) {
             // 下载设置组
-            const downloadGroup = this.createOptionGroup(container, "下载设置", true);
+            const downloadGroup = this.createOptionGroup(container, "基础下载设置", true);
             this.addBoolOption({
                 id: "parallelDownload",
                 label: "批量并行下载模式",
@@ -791,17 +798,10 @@
             });
             this.addBoolOption({
                 id: "fastDownload",
-                label: "批量高速下载模式（无动态加载内容）",
+                label: "快速模式（内存占用低，建议文章较多时启用）",
                 defaultValue: false,
                 container: downloadGroup,
-                tooltip: "改用fetch API，速度快，但无法获取JS动态加载的内容",
-            });
-            this.addBoolOption({
-                id: "addSerialNumber",
-                label: "批量下载时添加序号前缀",
-                defaultValue: true,
-                container: downloadGroup,
-                tooltip: '文件名会加入"No_"格式的序号前缀',
+                tooltip: `使用Fetch API，速度快，但<span style="color:red">无法获取JS动态加载内容</span>。<br>如果不启用，则使用iframe下载，容易内存溢出崩溃。<br><center>不启用时占用内存 ≈ 40MB * 文章数量</center><center>启用后占用内存 ≈ 40MB</center>文章较多时建议启用快速模式。下载后需要<span style="color:red">仔细检查内容<br>是否完整</span>，一般不会有问题。<br>另外，单篇文章直接读取当前页面，不受此选项影响。`,
             });
             this.addBoolOption({
                 id: "zipCategories",
@@ -817,7 +817,7 @@
                 label: "将图片保存至本地",
                 defaultValue: true,
                 container: downloadGroup,
-                tooltip: "默认保存到MD文件同名文件夹",
+                tooltip: "默认保存到和MD文件同名的文件夹中",
                 constraints: {
                     true: [{ id: "zipCategories", value: true }],
                     false: [{ id: "saveAllImagesToAssets", value: false }],
@@ -828,7 +828,7 @@
                 label: "图片保存至assets文件夹",
                 defaultValue: true,
                 container: downloadGroup,
-                tooltip: "如不启用，则保存到MD文件同名文件夹",
+                tooltip: "如不启用，则保存到和MD文件同名的文件夹中",
                 constraints: {
                     true: [
                         { id: "zipCategories", value: true },
@@ -836,39 +836,88 @@
                     ],
                 },
             });
+            this.addBoolOption({
+                id: "enableCustomFileName",
+                label: "启用批量下载文件名模板",
+                defaultValue: true,
+                container: downloadGroup,
+                tooltip: "启用后，批量下载的文件名将根据下方模板生成",
+            });
             this.addStringOption({
                 id: "customFileNamePattern",
-                label: "批量文件名模板",
+                label: "批量下载文件名模板",
                 defaultValue: "{no}_{title}",
                 container: downloadGroup,
                 tooltip: "可用变量：{title}、{author}、{index}、{no}（有前导0）",
             });
+
+            const advancedDownloadGroup = this.createOptionGroup(container, "高级下载设置");
             this.addIntOption({
                 id: "maxConcurrentDownloads",
                 label: "最大并行解析数",
-                defaultValue: 10,
-                container: downloadGroup,
+                defaultValue: 4,
+                container: advancedDownloadGroup,
                 min: 1,
                 max: 128,
                 step: 1,
                 tooltip: "越小越稳定，过大容易风控、内存溢出",
             });
             this.addIntOption({
-                id: "downloadAssetRetryCount",
-                label: "下载图片失败重试次数",
-                defaultValue: 3,
-                container: downloadGroup,
+                id: "delayBetweenDownloads",
+                label: "下载间隔（毫秒）",
+                defaultValue: 100,
+                container: advancedDownloadGroup,
                 min: 0,
-                max: 10,
+                max: 60000,
                 step: 1,
-                tooltip: "下载失败时重试次数，0表示不重试",
+                tooltip: "每次下载文章之间的延时，单位毫秒。<br>在并行时每个worker的间隔是独立的。<br>用于进一步减慢串行下载避免风控（放到最慢）",
+            });
+            this.addIntOption({
+                id: "downloadAssetRetryCount",
+                label: "下载资源失败重试次数",
+                defaultValue: 3,
+                container: advancedDownloadGroup,
+                min: 0,
+                max: 32,
+                step: 1,
+                tooltip: "下载网页、图片等失败时重试次数，0表示不重试",
+            });
+            this.addIntOption({
+                id: "downloadAssetRetryDelay",
+                label: "下载资源失败重试延时（毫秒）",
+                defaultValue: 1000,
+                container: advancedDownloadGroup,
+                min: 0,
+                max: 60000,
+                step: 1,
+                tooltip: "下载网页、图片等失败时重试前的延时，单位毫秒。<br>避免过快重试导致服务器风控",
+            });
+            this.addIntOption({
+                id: "startArticleIndex",
+                label: "从第几篇文章开始下载",
+                defaultValue: 1,
+                container: advancedDownloadGroup,
+                min: 1,
+                max: 10000,
+                step: 1,
+                tooltip: "从第几篇文章开始下载，1表示第一篇<br>避免一次下载多篇文章时风控，用于分批下载",
+            });
+            this.addIntOption({
+                id: "endArticleIndex",
+                label: "下载到第几篇文章",
+                defaultValue: 10000,
+                container: advancedDownloadGroup,
+                min: 1,
+                max: 10000,
+                step: 1,
+                tooltip: "下载到第几篇文章，超出范围则下载到最后一篇<br>避免一次下载多篇文章时风控，用于分批下载",
             });
             this.addBoolOption({
                 id: "enableStreaming",
-                label: "启用流式下载（节省内存，实验性功能）",
+                label: "启用流式压缩下载（节省内存，实验性功能）",
                 defaultValue: false,
-                container: downloadGroup,
-                tooltip: "批量下载启用流式压缩/下载，减少内存占用",
+                container: advancedDownloadGroup,
+                tooltip: "稍微减少内存占用。如下载失败，请关闭此选项。",
                 constraints: {
                     true: [{ id: "zipCategories", value: true }],
                 },
@@ -911,21 +960,37 @@
                 label: "启用彩色文字",
                 defaultValue: true,
                 container: contentGroup,
-                tooltip: "使用<span>格式实现彩色文字",
+                tooltip: "使用&lt;span&gt;格式实现彩色文字",
             });
             this.addBoolOption({
                 id: "enableImageSize",
                 label: "启用图片宽高属性",
                 defaultValue: true,
                 container: contentGroup,
-                tooltip: "仅当网页提供宽高属性时生效",
+                tooltip:
+                    "仅当网页提供宽高属性时生效。<br>如果启用，则具有宽高的图片会以&lt;img&gt;标签<br>插入文本中。如果不启用，则会以![]()格式插入。",
             });
             this.addBoolOption({
                 id: "forceImageCentering",
                 label: "全部图片居中",
                 defaultValue: false,
                 container: contentGroup,
-                tooltip: "忽略网页原有的图片对齐方式，全部居中",
+                tooltip:
+                    "忽略网页原有的图片对齐方式，全部居中。<br>图片靠左对齐是通过在图片前添加空格实现的，<br>不加空格则Typora显示为居中。",
+            });
+            this.addBoolOption({
+                id: "enableMarkdownEscape",
+                label: "启用Markdown特殊字符转义",
+                defaultValue: false,
+                container: contentGroup,
+                tooltip: "把会影响Markdown解析的字符用\\转义",
+            });
+            this.addStringOption({
+                id: "markdownEscapePattern",
+                label: "需要转义的Markdown字符",
+                defaultValue: "`*_[]{}()#+-.!",
+                container: contentGroup,
+                tooltip: "填入字符即可，这不是正则表达式，注意不要空格",
             });
 
             // 批量文章处理组
@@ -1342,7 +1407,7 @@
 
             const tooltipText = document.createElement("div");
             tooltipText.className = "tm_ui-tooltip-text";
-            tooltipText.textContent = text;
+            tooltipText.innerHTML = text;
 
             tooltip.appendChild(icon);
             tooltip.appendChild(tooltipText);
@@ -1996,7 +2061,14 @@
          * @param {string} imgPrefix - 图片前缀
          * @returns {Promise<string>} 本地图片路径
          */
-        async addWebImageFile(imgUrl, assetDirName, imgPrefix = "", streaming = false, retryCount = 3) {
+        async addWebImageFile(
+            imgUrl,
+            assetDirName,
+            imgPrefix = "",
+            streaming = false,
+            retryCount = 3,
+            retryDelay = 1000
+        ) {
             // 检查参数是否合法
             if (typeof imgUrl !== "string") {
                 throw new Error("[saveWebImageToLocal] Invalid argument: imgUrl must be a string.");
@@ -2035,8 +2107,8 @@
             this.imageSet[imgOwner][imgUrl] = `./${filename}`;
 
             // 获取图片的Blob对象
-            // const blob = await this.fetchImageAsBlob(imgUrl);
-            const blob = this.fetchResource(imgUrl, "blob", retryCount); // Promise返回的Blob对象，需要等到打包时进行等待
+            // 返回的Promise Blob对象，需要等到打包时进行等待
+            const blob = this.fetchResource(imgUrl, "blob", retryCount, retryDelay, "GM_xmlhttpRequest");
 
             if (streaming) {
                 // 存储 Promise 对象
@@ -2074,32 +2146,68 @@
          * @returns {Promise<Blob|string|Object>} - 返回资源的Blob对象或文本内容
          * @throws {Error} - 如果获取资源失败，抛出错误
          */
-        async fetchResource(url, responseType = "blob", retryCount = 3) {
+        async fetchResource(url, responseType = "blob", retryCount = 3, retryDelay = 1000, api = "GM_xmlhttpRequest") {
             return new Promise((resolve, reject) => {
                 function attemptFetch(remaining) {
-                    GM_xmlhttpRequest({
-                        method: "GET",
-                        url: url,
-                        responseType: responseType,
-                        onload: function (response) {
-                            if (response.status === 200) {
-                                resolve(response.response);
-                            } else {
-                                if (remaining > 0) {
-                                    attemptFetch(remaining - 1);
+                    if (api === "GM_xmlhttpRequest") {
+                        GM_xmlhttpRequest({
+                            method: "GET",
+                            url: url,
+                            responseType: responseType,
+                            onload: function (response) {
+                                if (response.status === 200) {
+                                    resolve(response.response);
                                 } else {
-                                    reject(`Failed to fetch resource: ${url}`);
+                                    if (remaining > 0) {
+                                        console.warn(`Retrying fetch for ${url}, attempts left: ${remaining - 1}`);
+                                        setTimeout(() => {
+                                            attemptFetch(remaining - 1);
+                                        }, retryDelay);
+                                    } else {
+                                        reject(
+                                            `Failed to fetch resource: ${url}\nStatus: ${response.status} ${response.statusText}`
+                                        );
+                                    }
                                 }
-                            }
-                        },
-                        onerror: function () {
-                            if (remaining > 0) {
-                                attemptFetch(remaining - 1);
-                            } else {
-                                reject(`Error fetching resource: ${url}`);
-                            }
-                        },
-                    });
+                            },
+                            onerror: function () {
+                                if (remaining > 0) {
+                                    console.warn(`Retrying fetch for ${url}, attempts left: ${remaining - 1}`);
+                                    setTimeout(() => {
+                                        attemptFetch(remaining - 1);
+                                    }, retryDelay);
+                                } else {
+                                    reject(`Error fetching resource: ${url}`);
+                                }
+                            },
+                        });
+                    } else if (api === "fetch") {
+                        fetch(url)
+                            .then((response) => {
+                                if (!response.ok) {
+                                    throw new Error(`HTTP error! status: ${response.status}`);
+                                }
+                                if (responseType === "json") return response.json();
+                                if (responseType.startsWith("text")) return response.text();
+                                if (responseType === "blob") return response.blob();
+                                throw new Error(`Unsupported response type: ${responseType}`);
+                            })
+                            .then((data) => {
+                                resolve(data);
+                            })
+                            .catch((error) => {
+                                if (remaining > 0) {
+                                    console.warn(`Retrying fetch for ${url}, attempts left: ${remaining - 1}`);
+                                    setTimeout(() => {
+                                        attemptFetch(remaining - 1);
+                                    }, retryDelay);
+                                } else {
+                                    reject(`Error fetching resource: ${url}\n${error.message}`);
+                                }
+                            });
+                    } else {
+                        reject(new Error(`Unsupported API: ${api}. Use 'GM_xmlhttpRequest' or 'fetch'.`));
+                    }
                 }
                 attemptFetch(retryCount);
             });
@@ -2246,7 +2354,7 @@
             this.zipStreamFileCount++;
 
             console.dir(
-                `Add file to stream (No: ${this.zipStreamFileCount}, Mem use: ${Utils.formatFileSize(
+                `Add file to stream (No: ${this.zipStreamFileCount}, Now Size: ${Utils.formatFileSize(
                     this.zipStreamSize
                 )}): ${filename}`
             );
@@ -2682,11 +2790,14 @@
                 imgPrefix: "",
                 saveWebImages: false,
                 downloadAssetRetryCount: 3,
+                downloadAssetRetryDelay: 1000,
                 enableStreaming: false,
                 forceImageCentering: false,
                 enableImageSize: false,
                 enableColorText: false,
                 removeCSDNSearchLink: true,
+                enableMarkdownEscape: true,
+                markdownEscapePattern: "`*_[]{}()#+-.!",
             };
 
             // 合并用户配置和默认配置，并添加上下文信息
@@ -2720,8 +2831,12 @@
 
                 case this.TEXT_NODE:
                     // 处理文本节点（即没有被单独的标签包裹的文本）
-                    return this.escapeMarkdown(node.textContent);
-
+                    if (context.enableMarkdownEscape) {
+                        // 如果启用了Markdown转义，则转义文本内容
+                        return this.escapeMarkdown(node.textContent, context.markdownEscapePattern);
+                    } else {
+                        return node.textContent.trim(); // 如果没有启用转义，则直接返回文本内容
+                    }
                 case this.COMMENT_NODE:
                     // 忽略注释
                     return "";
@@ -2750,10 +2865,15 @@
          * @param {string} text - 需要转义的文本
          * @returns {string} 转义后的文本
          */
-        escapeMarkdown(text) {
+        escapeMarkdown(text, escapePattern = "`*_[]{}()#+-.!") {
             // 注：原代码中有一个被注释掉的转义逻辑，这里只保留了trim操作
             // return text.replace(/([\\`*_\{\}\[\]()#+\-.!])/g, "\\$1").trim();
-            return text.trim(); // 不转义特殊字符
+            // return text.trim(); // 不转义特殊字符
+
+            // 使用正则表达式转义特殊字符
+            escapePattern = this.escapeRegExp(escapePattern);
+            const escapeRegex = new RegExp(`([${escapePattern}])`, "g");
+            return text.replace(escapeRegex, "\\$1").trim();
         }
 
         /**
@@ -2762,7 +2882,7 @@
          * @returns {string} 转义后的字符串
          */
         escapeRegExp(s) {
-            return s.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            return s.replaceAll(/[\-\.\*\+\?\^\$\{\}\(\)\|\[\]\\]/g, "\\$&");
         }
 
         /**
@@ -2963,7 +3083,8 @@
                         context.assetDirName,
                         context.imgPrefix,
                         context.enableStreaming,
-                        context.downloadAssetRetryCount
+                        context.downloadAssetRetryCount,
+                        context.downloadAssetRetryDelay
                     );
                 }
 
@@ -3559,7 +3680,6 @@
          * @param {boolean} config.enableStreaming - 是否启用流式处理
          * @param {boolean} config.mergeArticleContent - 是否合并文章内容
          * @param {boolean} config.saveAllImagesToAssets - 是否将所有图片保存
-         * @param {boolean} config.addSerialNumber - 是否添加序号
          * @param {boolean} config.addSerialNumberToTitle - 是否在标题前添加序号
          * @param {boolean} config.addArticleInfoInBlockquote - 是否在引用块中添加文章信息
          * @param {boolean} config.addArticleTitleToMarkdown - 是否在Markdown中添加文章标题
@@ -3571,28 +3691,12 @@
          * @param {boolean} config.enableColorText - 是否启用彩色文本
          * @param {boolean} config.removeCSDNSearchLink - 是否移除CSDN搜索链接
          * @param {string} config.customFileNamePattern - 是否使用自定义文件名模式
+         * @param {boolean} config.enableCustomFileName - 是否启用自定义文件名
          * @returns {Promise<string>} 解析后的文章标题
          * @throws {Error} 如果未找到文章内容
          */
         async parseArticle(doc_body, config = {}) {
-            const {
-                articleUrl = "",
-                fileIndex = 0,
-                fileTotal = 1,
-                enableStreaming = false,
-                mergeArticleContent = false,
-                saveAllImagesToAssets = true,
-                addSerialNumberToTitle = false,
-                addArticleInfoInBlockquote = false,
-                addArticleTitleToMarkdown = true,
-                addArticleInfoInYaml = true,
-                saveWebImages = true,
-                forceImageCentering = false,
-                enableImageSize = true,
-                enableColorText = true,
-                removeCSDNSearchLink = true,
-                customFileNamePattern = "",
-            } = config;
+            const { articleUrl = "", fileIndex = 0, fileTotal = 1 } = config;
 
             await this.unfoldHideArticleBox(doc_body);
             const articleTitle = doc_body.querySelector("#articleContentId")?.textContent.trim() || "未命名文章";
@@ -3607,8 +3711,8 @@
 
             const padNo = `${String(fileIndex).padStart(fileTotal.toString().length, "0")}`;
             let fileName = articleTitle;
-            if (fileIndex > 0) {
-                fileName = customFileNamePattern
+            if (fileIndex > 0 && config.enableCustomFileName) {
+                fileName = config.customFileNamePattern
                     .replaceAll("{no}", padNo)
                     .replaceAll("{title}", articleTitle)
                     .replaceAll("{author}", articleAuthor)
@@ -3619,31 +3723,26 @@
                 `正在解析文章：(${fileTotal - Math.max(1, fileIndex) + 1}/${fileTotal}) ` + articleTitle
             );
             let markdown = await this.markdownConverter.htmlToMarkdown(htmlInput, {
-                assetDirName: mergeArticleContent || saveAllImagesToAssets ? "assets" : fileName,
-                enableTOC: !mergeArticleContent,
+                assetDirName: config.mergeArticleContent || config.saveAllImagesToAssets ? "assets" : fileName,
+                enableTOC: !config.mergeArticleContent,
                 imgPrefix: `${padNo}_`,
-                saveWebImages: saveWebImages,
-                enableStreaming: enableStreaming,
-                forceImageCentering: forceImageCentering,
-                enableImageSize: enableImageSize,
-                enableColorText: enableColorText,
-                removeCSDNSearchLink: removeCSDNSearchLink,
+                ...config, // 传入其他配置选项
             });
 
-            if (addArticleInfoInBlockquote) {
+            if (config.addArticleInfoInBlockquote) {
                 markdown = `> ${articleInfo}\n> 文章链接：${Utils.clearUrl(articleUrl)}\n\n${markdown}`;
             }
-            if (addArticleTitleToMarkdown) {
-                if (addSerialNumberToTitle) {
+            if (config.addArticleTitleToMarkdown) {
+                if (config.addSerialNumberToTitle) {
                     markdown = `# ${padNo} ${articleTitle}\n\n${markdown}`;
                 } else {
                     markdown = `# ${articleTitle}\n\n${markdown}`;
                 }
             }
-            if (addArticleInfoInYaml) {
+            if (config.addArticleInfoInYaml) {
                 const article_info_box = doc_body.querySelector(".article-info-box");
                 // 文章标题
-                const meta_title = addSerialNumberToTitle ? `${padNo} ${articleTitle}` : articleTitle;
+                const meta_title = config.addSerialNumberToTitle ? `${padNo} ${articleTitle}` : articleTitle;
                 // 文章日期 YYYY-MM-DD HH:MM:SS
                 const meta_date =
                     article_info_box
@@ -3846,22 +3945,39 @@
          * @throws {Error} 如果下载失败或解析文章时出错
          */
         async downloadOneArticleFromBatch(url, index, total, config = {}) {
-            const newConfig = {
-                ...config, // 传入其他配置选项
-                articleUrl: url,
-                fileIndex: index,
-                fileTotal: total,
-            };
-            if (config.fastDownload) {
-                const response = await fetch(url);
-                const text = await response.text();
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(text, "text/html");
-                // 调用解析函数
-                await this.parseArticle(doc.body, newConfig);
-            } else {
-                await this.downloadArticleInIframe(url, newConfig);
-            }
+            return new Promise(async (resolve, reject) => {
+                try {
+                    const newConfig = {
+                        ...config, // 传入其他配置选项
+                        articleUrl: url,
+                        fileIndex: index,
+                        fileTotal: total,
+                    };
+                    if (config.fastDownload) {
+                        const response = await (await fetch(url)).text();
+                        // const response = await this.fileManager.fetchResource(
+                        //     url,
+                        //     "text/html",
+                        //     config.downloadAssetRetryCount || 3,
+                        //     config.downloadAssetRetryDelay || 1000,
+                        //     "fetch"
+                        // );
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(response, "text/html");
+                        // 调用解析函数
+                        await this.parseArticle(doc.body, newConfig);
+                    } else {
+                        await this.downloadArticleInIframe(url, newConfig);
+                    }
+                } catch (error) {
+                    reject(error);
+                }
+                if (config.delayBetweenDownloads && config.delayBetweenDownloads > 0) {
+                    setTimeout(() => resolve(), config.delayBetweenDownloads);
+                } else {
+                    resolve();
+                }
+            });
         }
 
         /**
@@ -4003,7 +4119,7 @@
                 }
             }
 
-            if (url_list.length >= 100) {
+            if (url_list.length >= 100 && config.parallelDownload) {
                 await this.uiManager.showConfirmDialog(
                     `检测到文章数量超过100篇（获取到${url_list.length}篇），使用并行下载可能会导致CSDN风控。\n建议改用串行，虽然慢些但更加稳定。\n点击”确定“将使用串行下载，点击”取消“将继续使用并行下载。`,
                     () => {
@@ -4048,9 +4164,40 @@
             }
 
             // 下载每篇文章
+            const totalArticleCount = url_list.length;
+            if (config.endArticleIndex < 1) {
+                this.uiManager.showFloatTip(
+                    `结束文章索引 ${config.endArticleIndex} 小于1，将不下载任何文章。`,
+                    3000
+                );
+                return;
+            }
+            else if (config.startArticleIndex > totalArticleCount) {
+                this.uiManager.showFloatTip(
+                    `开始文章索引 ${config.startArticleIndex} 超过总文章数 ${totalArticleCount}，将不下载任何文章。`,
+                    3000
+                );
+                return;
+            }
+            else if (config.startArticleIndex > config.endArticleIndex) {
+                this.uiManager.showFloatTip(
+                    `开始文章索引 ${config.startArticleIndex} 大于结束文章索引 ${config.endArticleIndex}，将不下载任何文章。`,
+                    3000
+                );
+                return;
+            } else {
+                this.uiManager.showFloatTip(
+                    `开始下载文章：从第 ${config.startArticleIndex} 篇到第 ${config.endArticleIndex} 篇，共 ${url_list.length} 篇。（总文章数：${totalArticleCount}）` 
+                );
+            }
             await Utils.parallelPool(
                 url_list,
-                (url, index) => this.downloadOneArticleFromBatch(url, url_list.length - index, url_list.length, config),
+                async (url, index) => {
+                    const articleIndex = totalArticleCount - index; // 反向
+                    if (articleIndex >= config.startArticleIndex && articleIndex <= config.endArticleIndex) {
+                       await this.downloadOneArticleFromBatch(url, articleIndex, totalArticleCount, config);
+                    }
+                },
                 config.parallelDownload ? config.maxConcurrentDownloads : 1
             );
 
@@ -4156,7 +4303,9 @@
                     const response = await this.fileManager.fetchResource(
                         `https://blog.csdn.net/community/home-api/v1/get-business-list?page=${page}&size=100&businessType=blog&orderby=&noMore=false&year=&month=&username=${user_id}`,
                         "json",
-                        config.downloadAssetRetryCount || 3
+                        config.downloadAssetRetryCount || 3,
+                        config.downloadAssetRetryDelay || 1000,
+                        "GM_xmlhttpRequest"
                     );
                     if (total_articles === 0) total_articles = response.data.total;
                     if (response.data.list.length === 0) break;
@@ -4304,7 +4453,7 @@
                 }
             }
 
-            if (url_list.length >= 100) {
+            if (url_list.length >= 100 && config.parallelDownload) {
                 await this.uiManager.showConfirmDialog(
                     `检测到文章数量超过100篇（获取到${url_list.length}篇），使用并行下载可能会导致CSDN风控。\n建议改用串行，虽然慢些但更加稳定。\n点击”确定“将使用串行下载，点击”取消“将继续使用并行下载。`,
                     () => {
@@ -4331,7 +4480,7 @@
                             3000
                         );
                     },
-                   async (error) => {
+                    async (error) => {
                         const newError = new Error(`流式下载中出现错误：${error.message || error}`);
                         newError.stack = error.stack || new Error().stack;
                         this.uiManager.showFloatTip(`流式下载中出现错误：${newError.message}`);
@@ -4348,9 +4497,41 @@
                 );
             }
 
+            // 下载每篇文章
+            const totalArticleCount = url_list.length;
+            if (config.endArticleIndex < 1) {
+                this.uiManager.showFloatTip(
+                    `结束文章索引 ${config.endArticleIndex} 小于1，将不下载任何文章。`,
+                    3000
+                );
+                return;
+            }
+            else if (config.startArticleIndex > totalArticleCount) {
+                this.uiManager.showFloatTip(
+                    `开始文章索引 ${config.startArticleIndex} 超过总文章数 ${totalArticleCount}，将不下载任何文章。`,
+                    3000
+                );
+                return;
+            }
+            else if (config.startArticleIndex > config.endArticleIndex) {
+                this.uiManager.showFloatTip(
+                    `开始文章索引 ${config.startArticleIndex} 大于结束文章索引 ${config.endArticleIndex}，将不下载任何文章。`,
+                    3000
+                );
+                return;
+            } else {
+                this.uiManager.showFloatTip(
+                    `开始下载文章：从第 ${config.startArticleIndex} 篇到第 ${config.endArticleIndex} 篇，共 ${url_list.length} 篇。（总文章数：${totalArticleCount}）` 
+                );
+            }
             await Utils.parallelPool(
                 url_list,
-                (url, index) => this.downloadOneArticleFromBatch(url, url_list.length - index, url_list.length, config),
+                async (url, index) => {
+                    const articleIndex = totalArticleCount - index; // 反向
+                    if (articleIndex >= config.startArticleIndex && articleIndex <= config.endArticleIndex) {
+                       await this.downloadOneArticleFromBatch(url, articleIndex, totalArticleCount, config);
+                    }
+                },
                 config.parallelDownload ? config.maxConcurrentDownloads : 1
             );
 
