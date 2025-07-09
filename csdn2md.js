@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         (dev) csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      3.0.1
+// @version      3.1.0
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -13,8 +13,8 @@
 // @run-at       document-idle
 // @license      PolyForm Strict License 1.0.0  https://polyformproject.org/licenses/strict/1.0.0/
 // @supportURL   https://github.com/Qalxry/csdn2md
-// @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js
 // @require      https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.min.js
+// @require      https://cdn.jsdelivr.net/npm/streamsaver@2.0.6/StreamSaver.min.js
 // ==/UserScript==
 
 (function () {
@@ -169,6 +169,14 @@
             // 截取到指定长度
             return hexHash.substring(0, length);
         },
+
+        formatFileSize(bytes) {
+            if (bytes === 0) return "0 Bytes";
+            const k = 1024;
+            const sizes = ["Bytes", "KB", "MB", "GB"];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+        },
     };
 
     /**
@@ -232,7 +240,9 @@
          * 创建UI管理器
          **/
         constructor() {
+            /** @type {ConfigManager} */
             this.configManager = new ConfigManager(); // 配置管理
+            /** @type {ArticleDownloader} */
             this.downloadManager = new ArticleDownloader(); // 下载管理器
             this.downloadManager.setUIManager(this); // 设置UI与下载管理器的双向引用
             this.isDragging = 0;
@@ -323,7 +333,7 @@
             }
 
             .tm_ui-options-container {
-                max-height: 400px;
+                max-height: 480px;
                 overflow-y: auto;
                 padding-right: 5px;
                 margin: 10px 0;
@@ -781,10 +791,10 @@
             });
             this.addBoolOption({
                 id: "fastDownload",
-                label: "批量高速下载模式（不推荐）",
+                label: "批量高速下载模式（无动态加载内容）",
                 defaultValue: false,
                 container: downloadGroup,
-                tooltip: "改用fetch，无法获取JS动态加载的内容",
+                tooltip: "改用fetch API，速度快，但无法获取JS动态加载的内容",
             });
             this.addBoolOption({
                 id: "addSerialNumber",
@@ -839,9 +849,29 @@
                 defaultValue: 10,
                 container: downloadGroup,
                 min: 1,
-                max: 32,
+                max: 128,
                 step: 1,
-                tooltip: "设置批量下载时的最大并行数量",
+                tooltip: "越小越稳定，过大容易风控、内存溢出",
+            });
+            this.addIntOption({
+                id: "downloadAssetRetryCount",
+                label: "下载图片失败重试次数",
+                defaultValue: 3,
+                container: downloadGroup,
+                min: 0,
+                max: 10,
+                step: 1,
+                tooltip: "下载失败时重试次数，0表示不重试",
+            });
+            this.addBoolOption({
+                id: "enableStreaming",
+                label: "启用流式下载（节省内存，实验性功能）",
+                defaultValue: false,
+                container: downloadGroup,
+                tooltip: "批量下载启用流式压缩/下载，减少内存占用",
+                constraints: {
+                    true: [{ id: "zipCategories", value: true }],
+                },
             });
 
             // 文章内容组
@@ -1694,6 +1724,7 @@
 
                     // Process each line of the stack trace
                     stackLines.forEach((line) => {
+                        line = decodeURIComponent(line.trim());
                         // Extract the relevant parts from each stack line
                         const match = line.match(/([^@\s]+)@(.*?):(\d+):(\d+)/);
                         if (match) {
@@ -1880,6 +1911,15 @@
             this.fileQueue = [];
             this.imageCount = {};
             this.imageSet = {};
+
+            this.zipStream = null;
+            this.zipStreamName = "";
+            this.zipStreamSize = 0;
+            this.zipStreamPendingFiles = new Map(); // 用于存储待处理的Blob对象
+            this.zipStreamFileCount = 0;
+            this.zipStreamProgressCallback = null;
+            this.zipStreamErrorCallback = null;
+            this.zipStreamEndFlag = null;
         }
 
         /**
@@ -1888,23 +1928,16 @@
          * @param {string} filename - 文件名
          * @param {number} index - 文件索引(用于排序)
          */
-        async addTextFile(content, filename, index = 0) {
+        async addTextFile(content, filename, index = 0, streaming = false) {
             filename = Utils.safeFilename(filename);
-            if (GM_getValue("zipCategories") || GM_getValue("mergeArticleContent")) {
+
+            if (streaming) {
+                // 如果是流式处理，直接添加到zip流
+                this.addFileToZipStream(filename, content);
+            } else {
                 // 保存到队列中，等待打包
                 this.fileQueue.push({ filename, type: "text/plain", content, index });
-                return;
             }
-
-            const blob = new Blob([content], { type: "text/plain" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
         }
 
         /**
@@ -1914,7 +1947,7 @@
          * @param {string} imgPrefix - 图片前缀
          * @returns {Promise<string>} 本地SVG路径
          */
-        async addSvgFile(svgText, assetDirName, imgPrefix = "") {
+        async addSvgFile(svgText, assetDirName, imgPrefix = "", streaming = false) {
             // 检查参数是否合法
             if (typeof svgText !== "string") {
                 throw new Error("[saveSvgToLocal] Invalid argument: svgText must be a string.");
@@ -1944,8 +1977,13 @@
             // 创建SVG的Blob对象
             const blob = new Blob([svgText], { type: "image/svg+xml" });
 
-            // 添加到文件队列
-            this.fileQueue.push({ filename, content: blob, type: "image/svg+xml", index });
+            if (streaming) {
+                // 如果是流式处理，直接添加到zip流
+                this.addFileToZipStream(filename, blob);
+            } else {
+                // 添加到文件队列
+                this.fileQueue.push({ filename, content: blob, type: "image/svg+xml", index });
+            }
 
             // 返回本地路径
             return `./${filename}`;
@@ -1958,7 +1996,7 @@
          * @param {string} imgPrefix - 图片前缀
          * @returns {Promise<string>} 本地图片路径
          */
-        async addWebImageFile(imgUrl, assetDirName, imgPrefix = "") {
+        async addWebImageFile(imgUrl, assetDirName, imgPrefix = "", streaming = false, retryCount = 3) {
             // 检查参数是否合法
             if (typeof imgUrl !== "string") {
                 throw new Error("[saveWebImageToLocal] Invalid argument: imgUrl must be a string.");
@@ -1998,10 +2036,31 @@
 
             // 获取图片的Blob对象
             // const blob = await this.fetchImageAsBlob(imgUrl);
-            const blob = this.fetchImageBlob(imgUrl); // Promise返回的Blob对象，需要等到打包时进行等待
+            const blob = this.fetchResource(imgUrl, "blob", retryCount); // Promise返回的Blob对象，需要等到打包时进行等待
 
-            // 添加到文件队列
-            this.fileQueue.push({ filename, content: blob, type: blob.type, index });
+            if (streaming) {
+                // 存储 Promise 对象
+                this.zipStreamPendingFiles.set(
+                    filename,
+                    new Promise(async (resolve) => {
+                        // 等待Blob解析完成
+                        try {
+                            const blobData = await blob;
+                            await this.addFileToZipStream(filename, blobData);
+                        } catch (error) {
+                            console.dir(`Error fetching image ${imgUrl}:`, error);
+                            if (this.zipStreamErrorCallback) {
+                                this.zipStreamErrorCallback(error);
+                            }
+                        }
+                        resolve();
+                        this.zipStreamPendingFiles.delete(filename); // 完成后从待处理列表中删除
+                    })
+                );
+            } else {
+                // 添加到文件队列
+                this.fileQueue.push({ filename, content: blob, type: blob.type, index });
+            }
 
             // 返回本地路径
             return `./${filename}`;
@@ -2010,16 +2069,18 @@
         /**
          * 获取网络资源
          * @param {string} url - 资源URL
+         * @param {string} [responseType='blob'] - 响应类型，默认为'blob'，可选值为'text'、'json'等
          * @param {number} retryCount - 重试次数，默认值为3
-         * @returns {Promise<Blob>} 资源Blob对象
+         * @returns {Promise<Blob|string|Object>} - 返回资源的Blob对象或文本内容
+         * @throws {Error} - 如果获取资源失败，抛出错误
          */
-        async fetchImageBlob(url, retryCount = 3) {
+        async fetchResource(url, responseType = "blob", retryCount = 3) {
             return new Promise((resolve, reject) => {
                 function attemptFetch(remaining) {
                     GM_xmlhttpRequest({
                         method: "GET",
                         url: url,
-                        responseType: "blob",
+                        responseType: responseType,
                         onload: function (response) {
                             if (response.status === 200) {
                                 resolve(response.response);
@@ -2085,26 +2146,212 @@
         }
 
         /**
-         * 下载合并后的文章
-         */
-        downloadMergedArticle() {
-            const content = this.fileQueue.pop();
-            const blob = new Blob([content.content], { type: "text/plain" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = content.filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+         * 创建ZIP流，使用 fflate 库和 streamSaver
+         * @param {Array<{name: string, data: Uint8Array|string}>} files - 文件对象数组
+         * @param {string} zipName - ZIP文件名
+         * @param {function(string, number):void} [onProgress] - 可选的进度回调，接收文件名和索引
+         * @param {function(string, number, number):void} [onFinished] - 可选的完成回调，接收当前zip文件名、文件总数、zip大小
+         * @param {function(Error):void} [onError] - 可选的错误回调
+         **/
+        async initializeZipStream(zipName, onProgress = null, onFinished = null, onError = null) {
+            if (!zipName.endsWith(".zip")) {
+                zipName += ".zip"; // 确保ZIP文件名以.zip结尾
+            }
+            const downloadStream = streamSaver.createWriteStream(zipName);
+            let writer = downloadStream.getWriter();
+
+            // 定义一个在页面卸-载前中止写入的函数
+            const abortStream = () => {
+                if (writer) {
+                    console.dir("页面即将卸载，中止写入流...");
+                    writer.abort("用户中断了下载").catch((e) => console.error("中止流时出错:", e));
+                    writer = null; // 清理writer引用
+                }
+            };
+            // 注册事件监听器
+            window.addEventListener("beforeunload", abortStream);
+
+            // 如果已经有zipStream存在，先结束之前的流
+            if (this.zipStream) {
+                console.dir("Ending previous ZIP stream before creating a new one.");
+                await this.endZipStream();
+            }
+
+            this.zipStreamName = zipName;
+            this.zipStreamSize = 0;
+            this.zipStreamFileCount = 0;
+
+            if (onProgress && typeof onProgress === "function") this.zipStreamProgressCallback = onProgress;
+            else this.zipStreamProgressCallback = null;
+            if (onError && typeof onError === "function") this.zipStreamErrorCallback = onError;
+            else this.zipStreamErrorCallback = null;
+
+            let zipFinalResolve = () => {
+                console.dir("ZIP stream resolved.");
+                this.zipStream = null; // 清理zipStream引用
+            };
+            let zipFinalReject = () => {};
+            this.zipStreamEndFlag = new Promise((resolve, reject) => {
+                zipFinalResolve = resolve;
+                zipFinalReject = reject;
+            });
+
+            this.zipStream = new fflate.Zip((err, chunk, final) => {
+                try {
+                    if (err) {
+                        writer.abort(err); // 如果出错，中止写入
+                        console.dir(`ZIP stream error: ${err}`);
+                        if (onError && typeof onError === "function") onError(err);
+                        zipFinalReject(err);
+                        return;
+                    }
+                    if (chunk) {
+                        this.zipStreamSize += chunk.length; // 累计ZIP数据大小，单位为字节
+                        writer.write(chunk);
+                    }
+                    if (final) {
+                        writer.close();
+                        writer = null; // 清理writer引用
+                        if (onFinished && typeof onFinished === "function") {
+                            onFinished(this.zipStreamName, this.zipStreamFileCount, this.zipStreamSize);
+                        }
+                        zipFinalResolve();
+                    }
+                } catch (error) {
+                    writer.abort(error); // 如果处理过程中出错，中止写入
+                    console.dir(`ZIP processing error: ${error}`);
+                    if (onError && typeof onError === "function") onError(error);
+                    zipFinalReject(error);
+                }
+            });
+        }
+
+        /**
+         * 向ZIP流中添加文件
+         * @param {string} filename - 文件名
+         * @param {string|Uint8Array|Blob|Promise} content - 文件内容，可以是字符串、Uint8Array或Blob
+         * @throws {Error} 如果zipStream未初始化或内容类型不支持
+         * @return {Promise<void>} 返回一个Promise，表示文件已添加到ZIP流中
+         **/
+        async addFileToZipStream(filename, content) {
+            if (!this.zipStream) throw new Error("ZIP stream is not initialized. Call createZipStream first.");
+
+            let data = null;
+            if (typeof content === "string") data = new TextEncoder().encode(content);
+            else if (content instanceof Uint8Array) data = content;
+            else if (content instanceof Blob) data = new Uint8Array(await content.arrayBuffer());
+            else throw new Error("Unsupported content type. Must be string, Uint8Array, or Blob.");
+
+            // 增加文件计数
+            this.zipStreamFileCount++;
+
+            console.dir(
+                `Add file to stream (No: ${this.zipStreamFileCount}, Mem use: ${Utils.formatFileSize(
+                    this.zipStreamSize
+                )}): ${filename}`
+            );
+
+            const fileStream = new fflate.ZipPassThrough(filename);
+            this.zipStream.add(fileStream);
+            fileStream.push(data, true);
+
+            if (this.zipStreamProgressCallback && typeof this.zipStreamProgressCallback === "function") {
+                this.zipStreamProgressCallback(this.zipStreamFileCount, filename);
+            }
+        }
+
+        /**
+         * 将所有文件添加到ZIP流中
+         * @param {boolean} [endStream=true] - 是否在添加完所有文件结束ZIP流
+         * @param {function(string, number, number):void} [addFilesFinalCallback=null] - 可选的最终回调，接收当前zip文件名、文件总数、zip大小
+         * @throws {Error} 如果zipStream未初始化
+         * @return {Promise<void>} 返回一个Promise，表示所有文件已添加到ZIP流中
+         **/
+        async addAllFilesInQueueToZipStream(endStream = false, addFilesFinalCallback = null) {
+            if (!this.zipStream) throw new Error("ZIP stream is not initialized. Call createZipStream first.");
+
+            if (this.fileQueue.length === 0) {
+                console.dir("没有文件需要打包到ZIP中");
+            } else {
+                // 使用 for...of 循环替代 forEach，以便正确处理 async/await
+                for (let idx = 0; idx < this.fileQueue.length; idx++) {
+                    let status = true;
+                    const file = this.fileQueue[idx];
+
+                    // content 可能是 promise（Blob对象），需要等待
+                    if (file.content instanceof Promise) {
+                        try {
+                            file.content = await file.content; // 等待Blob对象
+                        } catch (err) {
+                            console.dir(`Error resolving content for file ${file.filename}: ${err}`);
+                            if (this.zipStreamErrorCallback && typeof this.zipStreamErrorCallback === "function") {
+                                this.zipStreamErrorCallback(err);
+                            }
+                            status = false;
+                        }
+                    }
+                    if (!status) {
+                        console.dir(`Skipping file ${file.filename} due to download failure.`);
+                        continue; // 如果下载失败，跳过当前文件
+                    }
+                    // 将文件添加到ZIP中
+                    await this.addFileToZipStream(file.filename, file.content);
+                }
+            }
+
+            // 确保ZIP流已结束
+            if (endStream) {
+                await this.endZipStream();
+                console.dir("Ending ZIP stream after adding all files.");
+            }
+
+            // 调用最终回调
+            if (addFilesFinalCallback && typeof addFilesFinalCallback === "function") {
+                addFilesFinalCallback(this.zipStreamName, this.zipStreamFileCount, this.zipStreamSize);
+            }
+
+            // 清空文件队列
+            this.reset();
+        }
+
+        /**
+         * 结束ZIP流，完成写入
+         * @throws {Error} 如果zipStream未初始化
+         * @return {Promise<void>} 返回一个Promise，表示ZIP流已结束
+         **/
+        async endZipStream() {
+            if (!this.zipStream) throw new Error("ZIP stream is not initialized. Call createZipStream first.");
+            // 如果有待处理的Blob对象，等待它们完成
+            for (const [filename, blobProcessPromise] of this.zipStreamPendingFiles.entries()) {
+                if (blobProcessPromise instanceof Promise) {
+                    try {
+                        await blobProcessPromise; // 等待Blob对象解析
+                    } catch (error) {
+                        console.dir(`Error processing pending file ${filename}: ${error}`);
+                        if (this.zipStreamErrorCallback && typeof this.zipStreamErrorCallback === "function") {
+                            this.zipStreamErrorCallback(error);
+                        }
+                    }
+                }
+            }
+            // 清空待处理的Blob对象
+            this.zipStreamPendingFiles.clear();
+            this.zipStream.end();
+            try {
+                await this.zipStreamEndFlag; // 返回结束的Promise
+            } catch (error) {
+                console.dir(`Error ending ZIP stream: ${error}`);
+                if (this.zipStreamErrorCallback && typeof this.zipStreamErrorCallback === "function") {
+                    this.zipStreamErrorCallback(error);
+                }
+            }
+            this.zipStream = null; // 清理zipStream引用
         }
 
         /**
          * 使用 fflate 将文件打包成 ZIP，支持进度回调
          * @param {Array<{name: string, data: Uint8Array|string}>} files - 文件对象数组
          * @param {function(number, string):void} [onProgress] - 可选的进度回调，接收百分比和文件名
-         * @param {function(string):void} [onFinish] - 可选的完成回调
          * @param {function(Error):void} [onError] - 可选的错误回调
          * @return {Promise<Uint8Array>} 返回包含 ZIP 数据的 Promise
          **/
@@ -2172,12 +2419,16 @@
          */
         async zipAllFilesInQueue(zipName, progressCallback = null, finalCallback = null) {
             if (this.fileQueue.length === 0) {
-                console.error("没有文件需要保存");
+                console.dir("没有文件需要保存");
                 return;
             }
 
+            if (!zipName.endsWith(".zip")) {
+                zipName = zipName + ".zip"; // 确保ZIP文件名以.zip结尾
+            }
+
             zipName = Utils.safeFilename(zipName);
-            // 创建JSZip实例
+
             const zipFiles = [];
 
             // 使用 for...of 循环替代 forEach，以便正确处理 async/await
@@ -2234,8 +2485,8 @@
                 async (error) => {
                     console.error("Error generating ZIP file:", error);
                     if (finalCallback && typeof finalCallback === "function") {
-                        finalCallback(`下载失败：${zipName}.zip，错误信息：${error}`);
-                        throw new Error(`下载失败：${zipName}.zip，错误信息：${error}`);
+                        finalCallback(`下载失败：${zipName}，错误信息：${error}`);
+                        throw new Error(`下载失败：${zipName}，错误信息：${error}`);
                     }
                 }
             );
@@ -2245,16 +2496,14 @@
             // 调用最终回调
             if (finalCallback && typeof finalCallback === "function") {
                 finalCallback(
-                    `打包完成：${zipName}.zip，文件大小：${(zipBlob.size / 1024 / 1024).toFixed(
-                        2
-                    )} MB\n请等待下载完成。`
+                    `打包完成：${zipName}，文件大小：${Utils.formatFileSize(zipBlob.size)}\n请等待下载完成。`
                 );
             }
 
             this.reset(); // 清空文件队列
 
             this.fileQueue.push({
-                filename: `${zipName}.zip`,
+                filename: zipName,
                 type: "application/zip",
                 content: zipBlob,
             });
@@ -2265,7 +2514,7 @@
          */
         async downloadAllFilesInQueue() {
             if (this.fileQueue.length === 0) {
-                console.warn("没有文件需要下载");
+                console.dir("没有文件需要下载");
                 return;
             }
 
@@ -2300,7 +2549,7 @@
                 await new Promise((resolve) => setTimeout(resolve, 100));
             }
 
-            this.clearFileQueue();
+            this.reset(); // 清空文件队列
         }
 
         /**
@@ -2417,6 +2666,8 @@
          * @param {boolean} [config.enableTOC=true] - 是否启用目录
          * @param {string} [config.imgPrefix=""] - 图片文件前缀
          * @param {boolean} [config.saveWebImages=false] - 是否将网络图片保存到本地
+         * @param {number} [config.downloadAssetRetryCount=3] - 下载资源失败时的重试次数
+         * @param {boolean} [config.enableStreaming=false] - 是否启用流式处理
          * @param {boolean} [config.forceImageCentering=false] - 是否强制所有图片居中
          * @param {boolean} [config.enableImageSize=false] - 是否保留图片尺寸
          * @param {boolean} [config.enableColorText=false] - 是否保留彩色文本
@@ -2430,6 +2681,8 @@
                 enableTOC: true,
                 imgPrefix: "",
                 saveWebImages: false,
+                downloadAssetRetryCount: 3,
+                enableStreaming: false,
                 forceImageCentering: false,
                 enableImageSize: false,
                 enableColorText: false,
@@ -2518,7 +2771,9 @@
          * @returns {string} 修剪后的字符串
          */
         specialTrim(text = "") {
-            return text.replace(new RegExp(`^(?:${this.SEPB}|\\s)+`), "").replace(new RegExp(`(?:${this.SEPB}|\\s)+$`), "");
+            return text
+                .replace(new RegExp(`^(?:${this.SEPB}|\\s)+`), "")
+                .replace(new RegExp(`(?:${this.SEPB}|\\s)+$`), "");
         }
 
         /**
@@ -2703,7 +2958,13 @@
 
                 // 保存网络图片到本地（如果配置启用）
                 if (context.saveWebImages) {
-                    src = await this.fileManager.addWebImageFile(src, context.assetDirName, context.imgPrefix);
+                    src = await this.fileManager.addWebImageFile(
+                        src,
+                        context.assetDirName,
+                        context.imgPrefix,
+                        context.enableStreaming,
+                        context.downloadAssetRetryCount
+                    );
                 }
 
                 // 处理图片尺寸
@@ -2810,7 +3071,6 @@
 
                 return `\`\`\`${language}\n${await this.processCodeBlock(codeNode)}\`\`\`\n\n`;
             } else {
-                console.warn("代码块没有 <code> 元素:", node.outerHTML);
                 const codeText = node.textContent.replace(/^\s+|\s+$/g, "");
                 return `\`\`\`\n${codeText}\n\`\`\`\n\n`;
             }
@@ -3064,7 +3324,8 @@
                 const svgSavePath = await this.fileManager.addSvgFile(
                     node.outerHTML,
                     context.assetDirName,
-                    context.imgPrefix
+                    context.imgPrefix,
+                    context.enableStreaming
                 );
                 return `![](${svgSavePath})${this.CONSTANT_DOUBLE_NEW_LINE}`;
             } else {
@@ -3295,6 +3556,7 @@
          * @param {string} config.articleUrl - 文章链接
          * @param {number} config.fileIndex - 文件索引（用于批量下载）
          * @param {number} config.fileTotal - 文件总数（用于批量下载）
+         * @param {boolean} config.enableStreaming - 是否启用流式处理
          * @param {boolean} config.mergeArticleContent - 是否合并文章内容
          * @param {boolean} config.saveAllImagesToAssets - 是否将所有图片保存
          * @param {boolean} config.addSerialNumber - 是否添加序号
@@ -3303,6 +3565,7 @@
          * @param {boolean} config.addArticleTitleToMarkdown - 是否在Markdown中添加文章标题
          * @param {boolean} config.addArticleInfoInYaml - 是否在YAML中添加文章信息
          * @param {boolean} config.saveWebImages - 是否保存网络图片
+         * @param {number} config.downloadAssetRetryCount - 下载网络图片的重试次数
          * @param {boolean} config.forceImageCentering - 是否强制图片居中
          * @param {boolean} config.enableImageSize - 是否启用图片尺寸
          * @param {boolean} config.enableColorText - 是否启用彩色文本
@@ -3316,6 +3579,7 @@
                 articleUrl = "",
                 fileIndex = 0,
                 fileTotal = 1,
+                enableStreaming = false,
                 mergeArticleContent = false,
                 saveAllImagesToAssets = true,
                 addSerialNumberToTitle = false,
@@ -3332,7 +3596,7 @@
 
             await this.unfoldHideArticleBox(doc_body);
             const articleTitle = doc_body.querySelector("#articleContentId")?.textContent.trim() || "未命名文章";
-            const articleAuthor = doc_body.querySelector("#uid").textContent.trim() || "";
+            const articleAuthor = doc_body.querySelector("#uid")?.textContent.trim() || "";
             const articleInfo =
                 doc_body
                     .querySelector(".bar-content")
@@ -3348,15 +3612,18 @@
                     .replaceAll("{no}", padNo)
                     .replaceAll("{title}", articleTitle)
                     .replaceAll("{author}", articleAuthor)
-                    .replaceAll("{index}", fileIndex.toString())
+                    .replaceAll("{index}", fileIndex.toString());
             }
 
-            this.uiManager.showFloatTip(`正在解析文章：` + articleTitle);
+            this.uiManager.showFloatTip(
+                `正在解析文章：(${fileTotal - Math.max(1, fileIndex) + 1}/${fileTotal}) ` + articleTitle
+            );
             let markdown = await this.markdownConverter.htmlToMarkdown(htmlInput, {
                 assetDirName: mergeArticleContent || saveAllImagesToAssets ? "assets" : fileName,
                 enableTOC: !mergeArticleContent,
                 imgPrefix: `${padNo}_`,
                 saveWebImages: saveWebImages,
+                enableStreaming: enableStreaming,
                 forceImageCentering: forceImageCentering,
                 enableImageSize: enableImageSize,
                 enableColorText: enableColorText,
@@ -3380,25 +3647,27 @@
                 // 文章日期 YYYY-MM-DD HH:MM:SS
                 const meta_date =
                     article_info_box
-                        .querySelector(".time")
+                        ?.querySelector(".time")
                         ?.textContent.match(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/)[0] || "";
                 let articleMeta = `title: ${meta_title}\ndate: ${meta_date}\n`;
-
                 // 文章分类和标签
-                const meta_category_and_tags = Array.from(article_info_box.querySelectorAll(".tag-link")) || [];
-                if (meta_category_and_tags.length > 0 && article_info_box.textContent.includes("分类专栏")) {
-                    articleMeta += `categories:\n- ${meta_category_and_tags[0].textContent}\n`;
-                    meta_category_and_tags.shift();
-                }
-                if (meta_category_and_tags.length > 0 && article_info_box.textContent.includes("文章标签")) {
-                    articleMeta += `tags:\n${Array.from(meta_category_and_tags)
-                        .map((tag) => `- ${tag.textContent}`)
-                        .join("\n")}\n`;
+                if (article_info_box) {
+                    const meta_category_and_tags = Array.from(article_info_box.querySelectorAll(".tag-link")) || [];
+                    if (meta_category_and_tags.length > 0 && article_info_box.textContent.includes("分类专栏")) {
+                        articleMeta += `categories:\n- ${meta_category_and_tags[0].textContent}\n`;
+                        meta_category_and_tags.shift();
+                    }
+                    if (meta_category_and_tags.length > 0 && article_info_box.textContent.includes("文章标签")) {
+                        articleMeta += `tags:\n${Array.from(meta_category_and_tags)
+                            .map((tag) => `- ${tag.textContent}`)
+                            .join("\n")}\n`;
+                    }
                 }
                 markdown = `---\n${articleMeta}---\n\n${markdown}`;
             }
 
-            await this.fileManager.addTextFile(markdown, `${fileName}.md`, fileIndex);
+            // 这里不启用流式压缩，在解析结束时会统一压缩，文本占用内存比较小
+            await this.fileManager.addTextFile(markdown, `${fileName}.md`, fileIndex, false);
 
             return articleTitle;
         }
@@ -3529,25 +3798,27 @@
                             url = redirectUrl.replace(/^http:\/\//, "https://");
                         } else if (response.status !== 200) {
                             console.dir(`文章页面状态码异常：Url: ${url} Response Status: ${response.status}`);
-                            if (response.status === 521) {
-                                uiManager.showFloatTip(
-                                    `检查文章 ${url} 时状态码异常：${response.status}，有下载失败的可能性。`
-                                );
-                            } else {
-                                await uiManager.showConfirmDialog(
-                                    `检查文章 ${url} 时状态码异常：${response.status}，是否继续下载？\n（这里只是用HEAD方法预先检查了一下，也许下载时会成功）`,
-                                    () => {
-                                        // 用户点击确认后，继续下载
-                                        console.dir(`用户确认继续下载： Url: ${url}`);
-                                    },
-                                    () => {
-                                        const newError = new Error(
-                                            `文章页面状态码异常：Url: ${url} Response Status: ${response.status}`
-                                        );
-                                        reject(newError);
-                                    }
-                                );
-                            }
+                            // 这里的检测无意义，反而导致用户体验变差
+                            // 因为有些文章页面会返回521状态码，但实际可以下载
+                            // if (response.status === 521) {
+                            //     console.dir(
+                            //         `检查文章 ${url} 时状态码异常：${response.status}，有风控的可能性。`
+                            //     );
+                            // } else {
+                            //     await uiManager.showConfirmDialog(
+                            //         `检查文章 ${url} 时状态码异常：${response.status}，是否继续下载？\n（这里只是用HEAD方法预先检查了一下，也许下载时会成功）`,
+                            //         () => {
+                            //             // 用户点击确认后，继续下载
+                            //             console.dir(`用户确认继续下载： Url: ${url}`);
+                            //         },
+                            //         () => {
+                            //             const newError = new Error(
+                            //                 `文章页面状态码异常：Url: ${url} Response Status: ${response.status}`
+                            //             );
+                            //             reject(newError);
+                            //         }
+                            //     );
+                            // }
                         } else {
                             console.dir(`文章页面检查成功：${url}`);
                         }
@@ -3732,6 +4003,50 @@
                 }
             }
 
+            if (url_list.length >= 100) {
+                await this.uiManager.showConfirmDialog(
+                    `检测到文章数量超过100篇（获取到${url_list.length}篇），使用并行下载可能会导致CSDN风控。\n建议改用串行，虽然慢些但更加稳定。\n点击”确定“将使用串行下载，点击”取消“将继续使用并行下载。`,
+                    () => {
+                        config.parallelDownload = false; // 串行下载
+                        this.uiManager.showFloatTip("已切换为串行下载。");
+                    },
+                    () => {
+                        config.parallelDownload = true; // 并行下载
+                        this.uiManager.showFloatTip("继续使用并行下载。");
+                    }
+                );
+            }
+
+            if (config.enableStreaming) {
+                this.uiManager.showFloatTip("正在初始化流式下载...");
+                await this.fileManager.initializeZipStream(
+                    `${document.title}`,
+                    (fileName, fileIndex) => {},
+                    (zipStreamName, zipStreamFileCount, zipStreamSize) => {
+                        this.uiManager.showFloatTip(
+                            `打包完成：${zipStreamName}。文件数量：${zipStreamFileCount}，文件大小：${Utils.formatFileSize(
+                                zipStreamSize
+                            )}\n请等待下载完成。`,
+                            3000
+                        );
+                    },
+                    async (error) => {
+                        const newError = new Error(`流式下载中出现错误：${error.message || error}`);
+                        newError.stack = error.stack || new Error().stack;
+                        this.uiManager.showFloatTip(`流式下载中出现错误：${newError.message}`);
+                        await this.uiManager.showConfirmDialog(
+                            `出现错误：${newError.message}。是否忽略错误继续下载？`,
+                            () => {
+                                this.uiManager.showFloatTip("已忽略错误，继续下载。");
+                            },
+                            () => {
+                                throw newError;
+                            }
+                        );
+                    }
+                );
+            }
+
             // 下载每篇文章
             await Utils.parallelPool(
                 url_list,
@@ -3763,18 +4078,24 @@
                 this.fileManager.mergeTextFile(`${document.title}`, extraTopContent);
             }
 
-            if (config.zipCategories) {
-                await this.fileManager.zipAllFilesInQueue(
-                    `${document.title}`,
-                    (info_string) => {
-                        this.uiManager.showFloatTip(info_string);
-                    },
-                    (info_string) => {
-                        this.uiManager.showFloatTip(info_string, 3000);
-                    }
-                );
+            if (config.enableStreaming) {
+                this.uiManager.showFloatTip("正在等待流式压缩完成，请稍候...");
+                // endStream参数为true，表示结束流式压缩，直接下载
+                await this.fileManager.addAllFilesInQueueToZipStream(true);
+            } else {
+                if (config.zipCategories) {
+                    await this.fileManager.zipAllFilesInQueue(
+                        `${document.title}`,
+                        (info_string) => {
+                            this.uiManager.showFloatTip(info_string);
+                        },
+                        (info_string) => {
+                            this.uiManager.showFloatTip(info_string, 3000);
+                        }
+                    );
+                }
+                await this.fileManager.downloadAllFilesInQueue();
             }
-            await this.fileManager.downloadAllFilesInQueue();
             this.uiManager.showFloatTip("专栏文章全部处理完毕，请等待下载结束。", 3000);
         }
 
@@ -3807,7 +4128,7 @@
 
             // 获取用户原始ID
             // <link rel="canonical" href="https://blog.csdn.net/yanglfree">
-            async function getUrlListFromAPI() {
+            const getUrlListFromAPI = async () => {
                 let user_id = document.querySelector("link[rel='canonical']")?.href.match(/\/([^\/]+)$/)?.[1];
                 if (!user_id) {
                     console.dir(`Warning: 无法从canonical链接中获取用户ID。`);
@@ -3827,22 +4148,30 @@
                     console.dir(
                         `正在获取第 ${page} 页文章链接: https://blog.csdn.net/community/home-api/v1/get-business-list?page=${page}&size=100&businessType=blog&orderby=&noMore=false&year=&month=&username=${user_id}`
                     );
-                    const response = await (
-                        await fetch(
-                            `https://blog.csdn.net/community/home-api/v1/get-business-list?page=${page}&size=100&businessType=blog&orderby=&noMore=false&year=&month=&username=${user_id}`
-                        )
-                    ).json();
+                    // const response = await (
+                    //     await fetch(
+                    //         `https://blog.csdn.net/community/home-api/v1/get-business-list?page=${page}&size=100&businessType=blog&orderby=&noMore=false&year=&month=&username=${user_id}`
+                    //     )
+                    // ).json();
+                    const response = await this.fileManager.fetchResource(
+                        `https://blog.csdn.net/community/home-api/v1/get-business-list?page=${page}&size=100&businessType=blog&orderby=&noMore=false&year=&month=&username=${user_id}`,
+                        "json",
+                        config.downloadAssetRetryCount || 3
+                    );
                     if (total_articles === 0) total_articles = response.data.total;
                     if (response.data.list.length === 0) break;
                     temp_url_list.push(...response.data.list.map((item) => item.url));
                     console.dir(
                         `获取到第 ${page} 页 ${response.data.list.length} 篇文章链接 (${temp_url_list.length} / ${total_articles}):`
                     );
+                    this.uiManager.showFloatTip(
+                        `获取到第 ${page} 页 ${response.data.list.length} 篇文章链接 (${temp_url_list.length} / ${total_articles}):`
+                    );
                     page++;
                 } while (temp_url_list.length < total_articles);
 
                 return temp_url_list;
-            }
+            };
 
             try {
                 const res = await getUrlListFromAPI();
@@ -3858,6 +4187,11 @@
 
             // 如果API获取失败，则从页面获取文章链接
             if (url_list.length === 0) {
+                // 滚回顶部
+                window.scrollTo({
+                    top: 0,
+                    behavior: "smooth",
+                });
                 this.uiManager.showFloatTip("正在获取用户全部文章链接。可能需要进行多次页面滚动，请耐心等待。");
                 const url_set = new Set();
                 while (true) {
@@ -3970,7 +4304,50 @@
                 }
             }
 
-            // 下载每篇文章
+            if (url_list.length >= 100) {
+                await this.uiManager.showConfirmDialog(
+                    `检测到文章数量超过100篇（获取到${url_list.length}篇），使用并行下载可能会导致CSDN风控。\n建议改用串行，虽然慢些但更加稳定。\n点击”确定“将使用串行下载，点击”取消“将继续使用并行下载。`,
+                    () => {
+                        config.parallelDownload = false; // 串行下载
+                        this.uiManager.showFloatTip("已切换为串行下载。");
+                    },
+                    () => {
+                        config.parallelDownload = true; // 并行下载
+                        this.uiManager.showFloatTip("继续使用并行下载。");
+                    }
+                );
+            }
+
+            if (config.enableStreaming) {
+                this.uiManager.showFloatTip("正在初始化流式下载...");
+                await this.fileManager.initializeZipStream(
+                    `${document.title}`,
+                    (fileName, fileIndex) => {},
+                    (zipStreamName, zipStreamFileCount, zipStreamSize) => {
+                        this.uiManager.showFloatTip(
+                            `打包完成：${zipStreamName}。文件数量：${zipStreamFileCount}，文件大小：${Utils.formatFileSize(
+                                zipStreamSize
+                            )}\n请等待下载完成。`,
+                            3000
+                        );
+                    },
+                   async (error) => {
+                        const newError = new Error(`流式下载中出现错误：${error.message || error}`);
+                        newError.stack = error.stack || new Error().stack;
+                        this.uiManager.showFloatTip(`流式下载中出现错误：${newError.message}`);
+                        await this.uiManager.showConfirmDialog(
+                            `出现错误：${newError.message}。是否忽略错误继续下载？`,
+                            () => {
+                                this.uiManager.showFloatTip("已忽略错误，继续下载。");
+                            },
+                            () => {
+                                throw newError;
+                            }
+                        );
+                    }
+                );
+            }
+
             await Utils.parallelPool(
                 url_list,
                 (url, index) => this.downloadOneArticleFromBatch(url, url_list.length - index, url_list.length, config),
@@ -3985,20 +4362,27 @@
                 if (config.addArticleInfoInBlockquote_batch) {
                     extraTopContent += `> ${Utils.clearUrl(window.location.href)}\n\n`;
                 }
+                // 下载每篇文章
                 this.fileManager.mergeTextFile(`${document.title}`, extraTopContent);
             }
-            if (config.zipCategories) {
-                await this.fileManager.zipAllFilesInQueue(
-                    `${document.title}`,
-                    (info_string) => {
-                        this.uiManager.showFloatTip(info_string);
-                    },
-                    (info_string) => {
-                        this.uiManager.showFloatTip(info_string, 3000);
-                    }
-                );
+            if (config.enableStreaming) {
+                this.uiManager.showFloatTip("正在等待流式压缩完成，请稍候...");
+                // endStream参数为true，表示结束流式压缩，直接下载
+                await this.fileManager.addAllFilesInQueueToZipStream(true);
+            } else {
+                if (config.zipCategories) {
+                    await this.fileManager.zipAllFilesInQueue(
+                        `${document.title}`,
+                        (info_string) => {
+                            this.uiManager.showFloatTip(info_string);
+                        },
+                        (info_string) => {
+                            this.uiManager.showFloatTip(info_string, 3000);
+                        }
+                    );
+                }
+                await this.fileManager.downloadAllFilesInQueue();
             }
-            await this.fileManager.downloadAllFilesInQueue();
             this.uiManager.showFloatTip("用户全部文章处理完毕，请等待下载结束。", 3000);
         }
 
@@ -4006,7 +4390,7 @@
          * 下载单篇文章
          * @param {Object} config - 配置选项
          * @param {boolean} config.zipCategories - 是否将文章打包成zip
-         *
+         * @param {string} config.enableStreaming - 是否启用流式下载
          * @param {string} config.filePrefix - 文件名前缀
          * @param {string} config.articleUrl - 文章链接
          * @param {boolean} config.parallelDownload - 是否并行下载
@@ -4019,6 +4403,7 @@
          * @param {boolean} config.addArticleTitleToMarkdown - 是否在Markdown中添加文章标题
          * @param {boolean} config.addArticleInfoInYaml - 是否在YAML中添加文章信息
          * @param {boolean} config.saveWebImages - 是否保存网络图片
+         * @param {number} config.downloadAssetRetryCount - 下载网络图片的重试次数
          * @param {boolean} config.forceImageCentering - 是否强制图片居中
          * @param {boolean} config.enableImageSize - 是否启用图片尺寸
          * @param {boolean} config.enableColorText - 是否启用彩色文本
@@ -4029,6 +4414,7 @@
                 articleUrl: window.location.href,
                 ...config,
                 mergeArticleContent: false,
+                enableStreaming: false, // 单篇文章下载不支持流式下载
             });
             if (config.zipCategories) {
                 await this.fileManager.zipAllFilesInQueue(
