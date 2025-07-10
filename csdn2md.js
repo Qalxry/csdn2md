@@ -4305,7 +4305,7 @@
                         "json",
                         config.downloadAssetRetryCount || 3,
                         config.downloadAssetRetryDelay || 1000,
-                        "GM_xmlhttpRequest"
+                        "fetch"
                     );
                     if (total_articles === 0) total_articles = response.data.total;
                     if (response.data.list.length === 0) break;
