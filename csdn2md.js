@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      3.2.3
+// @version      3.3.0
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -349,8 +349,8 @@
             this.initStyles();
             this.initUI();
             this.setupEventListeners();
-            this.confirmDialogQueue = [];
-            this.confirmDialogActive = false;
+            this.dialogQueue = [];
+            this.isDialogActive = false;
             this.updateAllOptions();
         }
 
@@ -1653,6 +1653,12 @@
 
             // 隐藏遮罩层
             const overlay = this.floatWindow.querySelector(".tm_ui-options-disabled-overlay");
+            function preventScroll(e) {
+                e.preventDefault(); // 关键：阻止默认滚动
+                e.stopPropagation(); // 可选：阻止事件冒泡
+            }
+            overlay.removeEventListener("wheel", preventScroll);
+            overlay.removeEventListener("touchmove", preventScroll);
             if (overlay) overlay.style.display = "none";
         }
 
@@ -1672,6 +1678,12 @@
 
             // 显示遮罩层
             const overlay = this.floatWindow.querySelector(".tm_ui-options-disabled-overlay");
+            function preventScroll(e) {
+                e.preventDefault(); // 关键：阻止默认滚动
+                e.stopPropagation(); // 可选：阻止事件冒泡
+            }
+            overlay.addEventListener("wheel", preventScroll, { passive: false });
+            overlay.addEventListener("touchmove", preventScroll, { passive: false });
             if (overlay) overlay.style.display = "block";
         }
 
@@ -1709,133 +1721,270 @@
         }
 
         /**
-         * 显示一个确认对话框
-         * @param {string} message - 提示信息
-         * @param {function} onConfirm - 确认回调
-         * @param {function} onCancel - 取消回调
+         * 显示一个高度可定制的对话框。
+         * 这是核心方法，返回一个Promise。
+         * @param {object} options - 对话框的配置选项。
+         * @param {string} options.title - (可选) 对话框的标题。
+         * @param {string} options.message - 对话框的主体信息。
+         * @param {Array<object>} options.buttons - 按钮配置数组。
+         * @param {string} options.buttons[].text - 按钮上显示的文本。
+         * @param {any} options.buttons[].value - 点击按钮后Promise resolve的值。
+         * @param {'primary'|'default'|'danger'} [options.buttons[].type='default'] - 按钮类型，用于应用不同样式。
+         * @returns {Promise<any>} 当用户点击按钮时，Promise会resolve，并返回对应按钮的value。
          */
-        showConfirmDialog(message, onConfirm, onCancel) {
+        _createDialog(options) {
             return new Promise((resolve) => {
-                if (this.confirmDialogActive) {
-                    // 如果已有对话框在显示，加入队列
-                    this.confirmDialogQueue.push({ message, onConfirm, onCancel });
+                // 将请求加入队列
+                const dialogRequest = { options, resolve };
+
+                if (this.isDialogActive) {
+                    this.dialogQueue.push(dialogRequest);
                     return;
                 }
-                this.confirmDialogActive = true;
 
-                // 创建遮罩层
-                const overlay = document.createElement("div");
-                overlay.style.position = "fixed";
-                overlay.style.top = "0";
-                overlay.style.left = "0";
-                overlay.style.width = "100vw";
-                overlay.style.height = "100vh";
-                overlay.style.background = "rgba(0,0,0,0.5)";
-                overlay.style.zIndex = "10000";
-                overlay.style.backdropFilter = "blur(10px)";
-                overlay.id = "tm_confirm_overlay";
-
-                // 创建对话框
-                const dialog = document.createElement("div");
-                dialog.style.position = "fixed";
-                dialog.style.top = "50%";
-                dialog.style.left = "50%";
-                dialog.style.transform = "translate(-50%, -50%)";
-                dialog.style.background = "#fff";
-                dialog.style.padding = "16px 20px";
-                dialog.style.borderRadius = "8px";
-                dialog.style.boxShadow = "0 3px 16px rgba(0,0,0,0.25)";
-                dialog.style.textAlign = "center";
-                dialog.style.minWidth = "280px";
-                dialog.style.maxWidth = "90vw";
-                dialog.style.wordBreak = "break-all";
-                dialog.style.fontSize = "13px";
-
-                // 提示文本
-                const msg = document.createElement("div");
-                msg.innerHTML = message.replaceAll(/\n/g, "<br>");
-                msg.style.marginBottom = "15px";
-                msg.style.textAlign = "left"; // 向左对齐
-                msg.style.lineHeight = "1.5";
-                msg.style.color = "#333";
-                dialog.appendChild(msg);
-
-                // 按钮容器
-                const btnBox = document.createElement("div");
-                btnBox.style.display = "flex";
-                btnBox.style.justifyContent = "center";
-                btnBox.style.gap = "12px";
-
-                // 确认按钮
-                const okBtn = document.createElement("button");
-                okBtn.textContent = "确定";
-                okBtn.style.padding = "5px 16px";
-                okBtn.style.background = "linear-gradient(135deg, #12c2e9 0%, #c471ed 50%, #f64f59 100%)";
-                okBtn.style.color = "#fff";
-                okBtn.style.border = "none";
-                okBtn.style.borderRadius = "3px";
-                okBtn.style.cursor = "pointer";
-                okBtn.style.transition = "all 0.3s ease";
-                okBtn.style.fontWeight = "bold";
-                okBtn.style.fontSize = "12px";
-                okBtn.onmouseover = () => {
-                    okBtn.style.transform = "scale(1.05)";
-                    okBtn.style.boxShadow = "0 1px 5px rgba(0,0,0,0.15)";
-                };
-                okBtn.onmouseout = () => {
-                    okBtn.style.transform = "scale(1)";
-                    okBtn.style.boxShadow = "none";
-                };
-                okBtn.onclick = () => {
-                    document.body.removeChild(overlay);
-                    if (typeof onConfirm === "function") onConfirm();
-                    this.processNextDialog();
-                    resolve();
-                };
-
-                // 取消按钮
-                const cancelBtn = document.createElement("button");
-                cancelBtn.textContent = "取消";
-                cancelBtn.style.padding = "5px 16px";
-                cancelBtn.style.background = "#f0f0f0";
-                cancelBtn.style.color = "#333";
-                cancelBtn.style.border = "none";
-                cancelBtn.style.borderRadius = "3px";
-                cancelBtn.style.cursor = "pointer";
-                cancelBtn.style.transition = "all 0.2s ease";
-                cancelBtn.style.fontSize = "12px";
-                cancelBtn.onmouseover = () => {
-                    cancelBtn.style.background = "#e0e0e0";
-                };
-                cancelBtn.onmouseout = () => {
-                    cancelBtn.style.background = "#f0f0f0";
-                };
-                cancelBtn.onclick = () => {
-                    document.body.removeChild(overlay);
-                    if (typeof onCancel === "function") onCancel();
-                    this.processNextDialog();
-                    resolve();
-                };
-
-                btnBox.appendChild(cancelBtn);
-                btnBox.appendChild(okBtn);
-                dialog.appendChild(btnBox);
-                overlay.appendChild(dialog);
-                document.body.appendChild(overlay);
+                this._displayDialog(dialogRequest);
             });
         }
 
         /**
-         * 处理队列中的下一个对话框
+         * 显示一个预设的确认对话框（兼容旧功能）。
+         * @param {string|object} options - 对话框配置或消息字符串。
+         * @param {string} [options.message] - 对话框的主体信息。
+         * @param {string} [options.title] - (可选) 对话框的标题。
+         * @param {function} [onConfirm] - (可选) 确认回调。
+         * @param {function} [onCancel] - (可选) 取消回调。
+         * @returns {Promise<'confirm'|'cancel'>} 返回一个Promise，方便链式调用。
          */
-        processNextDialog() {
-            this.confirmDialogActive = false;
-            if (this.confirmDialogQueue.length > 0) {
-                const nextDialog = this.confirmDialogQueue.shift();
-                setTimeout(() => {
-                    this.showConfirmDialog(nextDialog.message, nextDialog.onConfirm, nextDialog.onCancel);
-                }, 100);
+        async showConfirmDialog(options, onConfirm, onCancel) {
+            if (typeof options === "string") {
+                options = { message: options };
             }
+            const result = await this._createDialog({
+                ...options,
+                buttons: [
+                    { text: "取消", value: "cancel", type: "default" },
+                    { text: "确定", value: "confirm", type: "primary" },
+                ],
+            });
+            if (result === "confirm" && typeof onConfirm === "function") {
+                onConfirm();
+            } else if (result === "cancel" && typeof onCancel === "function") {
+                onCancel();
+            }
+            return result;
+        }
+
+        /**
+         * 显示一个自定义对话框。
+         * @param {object|string} options - 对话框配置或消息字符串。
+         * @param {...object} items - 按钮配置数组或单个按钮对象
+         * @param {string} items[].text - 按钮文本。
+         * @param {any} items[].value - 按钮点击后返回的值
+         * @param {'primary'|'default'|'danger'} [items[].type='default'] - 按钮类型。
+         * @param {function} [items[].callback] - 按钮点击时的回调函数。
+         * @returns {Promise<any>} 返回一个Promise，resolve为点击的按钮的value
+         */
+        async showDialog(options, ...items) {
+            if (typeof options === "string") {
+                options = { message: options };
+            } else if (Array.isArray(options)) {
+                items = options;
+                options = { message: "请选择操作" };
+            } else if (typeof options !== "object") {
+                throw new Error("Expected options to be a string, array, or object");
+            }
+            const result = await this._createDialog({
+                ...options,
+                buttons: items.map((item, index) => ({
+                    text: item.text || `按钮${index + 1}`,
+                    type: item.type || "default",
+                    value: index,
+                })),
+            });
+            if (items[result].callback && typeof items[result].callback === "function") {
+                items[result].callback();
+            }
+            return items[result].value || items[result].text || result;
+        }
+
+        /**
+         * @private
+         * 内部方法，用于实际创建和显示对话框。
+         * @param {object} dialogRequest - 包含options和resolve函数的请求对象。
+         */
+        _displayDialog({ options, resolve }) {
+            this.isDialogActive = true;
+
+            // 默认配置
+            const config = {
+                title: "",
+                ...options,
+            };
+
+            // 创建遮罩层
+            const overlay = this._createOverlay();
+
+            // 创建对话框容器
+            const dialog = this._createDialogContainer();
+
+            // 添加标题 (如果提供)
+            if (config.title) {
+                const titleEl = this._createTitle(config.title);
+                dialog.appendChild(titleEl);
+            }
+
+            // 添加消息
+            const messageEl = this._createMessage(config.message);
+            dialog.appendChild(messageEl);
+
+            // 创建并添加按钮
+            const btnBox = this._createButtonContainer();
+            config.buttons.forEach((btnConfig) => {
+                const button = this._createButton(btnConfig, (value) => {
+                    // 关闭对话框的逻辑
+                    document.body.removeChild(overlay);
+                    this._processNextDialog();
+                    resolve(value);
+                });
+                btnBox.appendChild(button);
+            });
+
+            dialog.appendChild(btnBox);
+            overlay.appendChild(dialog);
+            document.body.appendChild(overlay);
+        }
+
+        /**
+         * @private
+         * 处理队列中的下一个对话框。
+         */
+        _processNextDialog() {
+            this.isDialogActive = false;
+            if (this.dialogQueue.length > 0) {
+                const nextRequest = this.dialogQueue.shift();
+                // 加一个短暂的延迟，避免视觉上两个弹窗无缝衔接
+                setTimeout(() => this._displayDialog(nextRequest), 100);
+            }
+        }
+
+        // --- DOM元素创建的辅助方法 ---
+
+        _createOverlay() {
+            const overlay = document.createElement("div");
+            Object.assign(overlay.style, {
+                position: "fixed",
+                top: "0",
+                left: "0",
+                width: "100vw",
+                height: "100vh",
+                background: "rgba(0,0,0,0.5)",
+                zIndex: "10000",
+                backdropFilter: "blur(10px)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+            });
+            return overlay;
+        }
+
+        _createDialogContainer() {
+            const dialog = document.createElement("div");
+            Object.assign(dialog.style, {
+                background: "#fff",
+                padding: "20px 24px",
+                borderRadius: "12px",
+                boxShadow: "0 5px 20px rgba(0,0,0,0.2)",
+                minWidth: "300px",
+                maxWidth: "calc(100vw - 40px)",
+                wordBreak: "break-word",
+                fontSize: "14px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "16px", // 统一内容间距
+            });
+            return dialog;
+        }
+
+        _createTitle(titleText) {
+            const title = document.createElement("h3");
+            title.textContent = titleText;
+            Object.assign(title.style, {
+                margin: "0",
+                fontSize: "18px",
+                fontWeight: "600",
+                color: "#111",
+                textAlign: "center",
+            });
+            return title;
+        }
+
+        _createMessage(messageText) {
+            const msg = document.createElement("div");
+            msg.innerHTML = messageText.replace(/\n/g, "<br>");
+            Object.assign(msg.style, {
+                textAlign: "left",
+                lineHeight: "1.6",
+                color: "#333",
+                maxHeight: "60vh",
+                overflowY: "auto",
+            });
+            return msg;
+        }
+
+        _createButtonContainer() {
+            const btnBox = document.createElement("div");
+            Object.assign(btnBox.style, {
+                display: "flex",
+                justifyContent: "flex-end", // 按钮靠右更常见
+                gap: "12px",
+                marginTop: "8px",
+            });
+            return btnBox;
+        }
+
+        _getButtonStyles(type = "default") {
+            const baseStyle = {
+                padding: "6px 18px",
+                border: "none",
+                borderRadius: "5px",
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+                fontWeight: "500",
+                fontSize: "13px",
+            };
+
+            const typeStyles = {
+                primary: {
+                    background: "linear-gradient(135deg, #12c2e9 0%, #c471ed 50%, #f64f59 100%)",
+                    color: "#fff",
+                },
+                danger: {
+                    background: "#e74c3c",
+                    color: "#fff",
+                },
+                default: {
+                    background: "#f0f0f0",
+                    color: "#333",
+                    border: "1px solid #ddd",
+                },
+            };
+
+            return { ...baseStyle, ...(typeStyles[type] || typeStyles["default"]) };
+        }
+
+        _createButton(btnConfig, closeCallback) {
+            const button = document.createElement("button");
+            button.textContent = btnConfig.text;
+
+            Object.assign(button.style, this._getButtonStyles(btnConfig.type));
+
+            button.onclick = () => closeCallback(btnConfig.value);
+
+            // 添加悬停效果
+            button.onmouseover = () => (button.style.opacity = "0.85");
+            button.onmouseout = () => (button.style.opacity = "1");
+
+            return button;
         }
 
         /**
@@ -1922,7 +2071,10 @@
             errorDetails = errorDetails.trim();
 
             await this.showConfirmDialog(
-                `下载文章时出错！是否前往Github提交Issue以告知开发者进行修复？（您需要拥有Github账号）\n错误详情：\n${errorDetails}`,
+                {
+                    title: "⚠️ 警告",
+                    message: `下载文章时出错！是否前往Github提交Issue以告知开发者进行修复？（您需要拥有Github账号）\n错误详情：\n${errorDetails}`,
+                },
                 () =>
                     this.gotoGithubIssue(
                         `[BUG] 下载失败 (${getCurrentPageType()}页面)`,
@@ -4012,7 +4164,10 @@
                             if (hasCaptcha(doc)) {
                                 console.dir(`检测到验证码： Url: ${url}`);
                                 await this.uiManager.showConfirmDialog(
-                                    `检测到验证码，您需要手动验证通过后，再刷新页面重新进行下载。\n点击确认将显示该验证页面，若取消则无法下载。\nUrl: ${url}`,
+                                    {
+                                        title: "ℹ️ 提示",
+                                        message: `检测到验证码，您需要手动验证通过后，再刷新页面重新进行下载。\n点击确认将显示该验证页面，若取消则无法下载。\nUrl: ${url}`,
+                                    },
                                     async () => {
                                         // 用户点击确认后，重新加载iframe
                                         console.dir(`用户确认验证码处理： Url: ${url}`);
@@ -4311,18 +4466,48 @@
                 }
             }
 
-            if (url_list.length >= 100 && config.parallelDownload) {
-                await this.uiManager.showConfirmDialog(
-                    `检测到文章数量超过100篇（获取到${url_list.length}篇），使用并行下载可能会导致CSDN风控。\n建议改用串行，虽然慢些但更加稳定。\n点击”确定“将使用串行下载，点击”取消“将继续使用并行下载。`,
-                    () => {
-                        config.parallelDownload = false; // 串行下载
-                        this.uiManager.showFloatTip("已切换为串行下载。");
+            if (url_list.length >= 100 && config.parallelDownload && !config.fastDownload) {
+                let continueDownload = true;
+                await this.uiManager.showDialog(
+                    {
+                        title: "ℹ️ 提示",
+                        message: `检测到文章数量超过100篇（获取到${url_list.length}篇），\n使用并行下载可能会导致CSDN风控或者内存溢出。\n建议改用串行（慢些）或者启用快速模式（避免内存溢出崩溃）。`,
                     },
-                    () => {
-                        config.parallelDownload = true; // 并行下载
-                        this.uiManager.showFloatTip("继续使用并行下载。");
+                    {
+                        text: "取消下载",
+                        type: "primary",
+                        callback: () => {
+                            this.uiManager.showFloatTip("已取消下载。");
+                            continueDownload = false; // 取消下载
+                        },
+                    },
+                    {
+                        text: "取消并行，使用串行",
+                        type: "default",
+                        callback: () => {
+                            config.parallelDownload = false; // 串行下载
+                            this.uiManager.showFloatTip("已切换为串行下载。");
+                        },
+                    },
+                    {
+                        text: "启用快速模式",
+                        type: "default",
+                        callback: () => {
+                            config.fastDownload = true; // 启用快速下载
+                            this.uiManager.showFloatTip("已启用快速下载模式。");
+                        },
+                    },
+                    {
+                        text: "继续使用并行下载",
+                        type: "danger",
+                        callback: () => {
+                            this.uiManager.showFloatTip("继续使用并行下载。");
+                        },
                     }
                 );
+                if (!continueDownload) {
+                    return; // 如果用户取消下载，则退出
+                }
             }
 
             if (config.enableStreaming) {
@@ -4645,18 +4830,48 @@
                 }
             }
 
-            if (url_list.length >= 100 && config.parallelDownload) {
-                await this.uiManager.showConfirmDialog(
-                    `检测到文章数量超过100篇（获取到${url_list.length}篇），使用并行下载可能会导致CSDN风控。\n建议改用串行，虽然慢些但更加稳定。\n点击”确定“将使用串行下载，点击”取消“将继续使用并行下载。`,
-                    () => {
-                        config.parallelDownload = false; // 串行下载
-                        this.uiManager.showFloatTip("已切换为串行下载。");
+            if (url_list.length >= 100 && config.parallelDownload && !config.fastDownload) {
+                let continueDownload = true;
+                await this.uiManager.showDialog(
+                    {
+                        title: "ℹ️ 提示",
+                        message: `检测到文章数量超过100篇（获取到${url_list.length}篇），\n使用并行下载可能会导致CSDN风控或者内存溢出。\n建议改用串行（慢些）或者启用快速模式（避免内存溢出崩溃）。`,
                     },
-                    () => {
-                        config.parallelDownload = true; // 并行下载
-                        this.uiManager.showFloatTip("继续使用并行下载。");
+                    {
+                        text: "取消下载",
+                        type: "primary",
+                        callback: () => {
+                            this.uiManager.showFloatTip("已取消下载。");
+                            continueDownload = false; // 取消下载
+                        },
+                    },
+                    {
+                        text: "取消并行，使用串行",
+                        type: "default",
+                        callback: () => {
+                            config.parallelDownload = false; // 串行下载
+                            this.uiManager.showFloatTip("已切换为串行下载。");
+                        },
+                    },
+                    {
+                        text: "启用快速模式",
+                        type: "default",
+                        callback: () => {
+                            config.fastDownload = true; // 启用快速下载
+                            this.uiManager.showFloatTip("已启用快速下载模式。");
+                        },
+                    },
+                    {
+                        text: "继续使用并行下载",
+                        type: "danger",
+                        callback: () => {
+                            this.uiManager.showFloatTip("继续使用并行下载。");
+                        },
                     }
                 );
+                if (!continueDownload) {
+                    return; // 如果用户取消下载，则退出
+                }
             }
 
             if (config.enableStreaming) {
