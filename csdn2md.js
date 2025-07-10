@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      3.2.2
+// @version      3.2.3
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -20,6 +20,80 @@
 
 (function () {
     "use strict";
+
+    // 需要加载的库及其备用源
+    const libsToLoad = {
+        JSZip: {
+            isLoaded: () => typeof JSZip !== "undefined",
+            urls: [
+                "https://cdnjs.webstatic.cn/ajax/libs/jszip/3.7.1/jszip.min.js#sha256-yeSlK6wYruTz+Q0F+8pgP1sPW/HOjEXmC7TtOiyy7YY=",
+                "https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/jszip/3.7.1/jszip.min.js#sha256-yeSlK6wYruTz+Q0F+8pgP1sPW/HOjEXmC7TtOiyy7YY=",
+                "https://use.sevencdn.com/ajax/libs/jszip/3.7.1/jszip.min.js#sha256-yeSlK6wYruTz+Q0F+8pgP1sPW/HOjEXmC7TtOiyy7YY=",
+                "https://cdn.jsdmirror.com/ajax/libs/jszip/3.7.1/jszip.min.js#sha256-yeSlK6wYruTz+Q0F+8pgP1sPW/HOjEXmC7TtOiyy7YY=",
+                "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js#sha256-yeSlK6wYruTz+Q0F+8pgP1sPW/HOjEXmC7TtOiyy7YY=",
+            ],
+        },
+        fflate: {
+            isLoaded: () => typeof fflate !== "undefined",
+            urls: [
+                "https://npm.webcache.cn/fflate@0.8.2/umd/index.js#sha256-w7NPLp9edNTX1k4BysegwBlUxsQGQU1CGFx7U9aHXd8=",
+                "https://use.sevencdn.com/npm/fflate@0.8.2/umd/index.js#sha256-w7NPLp9edNTX1k4BysegwBlUxsQGQU1CGFx7U9aHXd8=",
+                "https://cdn.jsdmirror.com/npm/fflate@0.8.2/umd/index.js#sha256-w7NPLp9edNTX1k4BysegwBlUxsQGQU1CGFx7U9aHXd8=",
+                "https://unpkg.com/fflate@0.8.2/umd/index.js#sha256-w7NPLp9edNTX1k4BysegwBlUxsQGQU1CGFx7U9aHXd8=",
+                "https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js#sha256-w7NPLp9edNTX1k4BysegwBlUxsQGQU1CGFx7U9aHXd8=",
+            ],
+        },
+        streamSaver: {
+            isLoaded: () => typeof streamSaver !== "undefined",
+            urls: [
+                "https://cdn.jsdmirror.com/npm/streamsaver@2.0.6/StreamSaver.min.js#sha256-w7NPLp9edNTX1k4BysegwBlUxsQGQU1CGFx7U9aHXd8=",
+                "https://use.sevencdn.com/npm/streamsaver@2.0.6/StreamSaver.min.js",
+                "https://cdn.jsdelivr.net/npm/streamsaver@2.0.6/StreamSaver.min.js",
+            ],
+        },
+    };
+
+    // 动态插入脚本
+    function loadScript(src) {
+        return new Promise((resolve, reject) => {
+            const s = document.createElement("script");
+            let hash = src.match(/#(.*)$/)?.[1];
+            s.src = src;
+            if (hash) {
+                s.setAttribute("integrity", hash);
+                s.setAttribute("crossorigin", "anonymous");
+            }
+            s.onload = () => {
+                resolve();
+            };
+            s.onerror = () => reject(new Error(`Failed to load ${src.slice(0, 100)}`));
+            document.head.appendChild(s);
+        });
+    }
+
+    // 如果全局对象不存在，就按顺序尝试加载备用源
+    (async () => {
+        for (const [libName, libData] of Object.entries(libsToLoad)) {
+            if (!libData.isLoaded()) {
+                console.warn(`${libName} not found, loading from additional sources...`);
+                for (const url of libData.urls) {
+                    try {
+                        await loadScript(url);
+                        // 检查是否加载成功
+                        if (!libData.isLoaded()) {
+                            throw new Error(`not loaded after script injection`);
+                        }
+                        console.info(`${libName} loaded successfully from ${url}`);
+                        break;
+                    } catch (e) {
+                        console.error(`Failed to load ${libName} from ${url}:`, e);
+                    }
+                }
+            } else {
+                console.info(`${libName} is already loaded.`);
+            }
+        }
+    })();
 
     /**
      * 模块: 工具函数
@@ -4294,7 +4368,10 @@
                 return;
             } else {
                 this.uiManager.showFloatTip(
-                    `开始下载文章：从第 ${Math.max(1, config.startArticleIndex)} 篇到第 ${Math.min(totalArticleCount, config.endArticleIndex)} 篇，共 ${url_list.length} 篇。（总文章数：${totalArticleCount}）`
+                    `开始下载文章：从第 ${Math.max(1, config.startArticleIndex)} 篇到第 ${Math.min(
+                        totalArticleCount,
+                        config.endArticleIndex
+                    )} 篇，共 ${url_list.length} 篇。（总文章数：${totalArticleCount}）`
                 );
             }
             await Utils.parallelPool(
@@ -4625,7 +4702,10 @@
                 return;
             } else {
                 this.uiManager.showFloatTip(
-                    `开始下载文章：从第 ${Math.max(1, config.startArticleIndex)} 篇到第 ${Math.min(totalArticleCount, config.endArticleIndex)} 篇，共 ${url_list.length} 篇。（总文章数：${totalArticleCount}）`
+                    `开始下载文章：从第 ${Math.max(1, config.startArticleIndex)} 篇到第 ${Math.min(
+                        totalArticleCount,
+                        config.endArticleIndex
+                    )} 篇，共 ${url_list.length} 篇。（总文章数：${totalArticleCount}）`
                 );
             }
             await Utils.parallelPool(

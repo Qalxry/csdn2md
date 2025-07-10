@@ -1,0 +1,3 @@
+plugins/jszip.min.js sha256-yeSlK6wYruTz+Q0F+8pgP1sPW/HOjEXmC7TtOiyy7YY=
+plugins/fflate.min.js sha256-w7NPLp9edNTX1k4BysegwBlUxsQGQU1CGFx7U9aHXd8=
+plugins/streamSaver.min.js sha256-VxQm++CYEdHipBjKWh4QQHHOYZmyo8F/7dJQxG11xFM=
