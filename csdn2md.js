@@ -4466,50 +4466,6 @@
                 }
             }
 
-            if (url_list.length >= 100 && config.parallelDownload && !config.fastDownload) {
-                let continueDownload = true;
-                await this.uiManager.showDialog(
-                    {
-                        title: "ℹ️ 提示",
-                        message: `检测到文章数量超过100篇（获取到${url_list.length}篇），\n使用并行下载可能会导致CSDN风控或者内存溢出。\n建议改用串行（慢些）或者启用快速模式（避免内存溢出崩溃）。`,
-                    },
-                    {
-                        text: "取消下载",
-                        type: "primary",
-                        callback: () => {
-                            this.uiManager.showFloatTip("已取消下载。");
-                            continueDownload = false; // 取消下载
-                        },
-                    },
-                    {
-                        text: "取消并行，使用串行",
-                        type: "default",
-                        callback: () => {
-                            config.parallelDownload = false; // 串行下载
-                            this.uiManager.showFloatTip("已切换为串行下载。");
-                        },
-                    },
-                    {
-                        text: "启用快速模式",
-                        type: "default",
-                        callback: () => {
-                            config.fastDownload = true; // 启用快速下载
-                            this.uiManager.showFloatTip("已启用快速下载模式。");
-                        },
-                    },
-                    {
-                        text: "继续使用并行下载",
-                        type: "danger",
-                        callback: () => {
-                            this.uiManager.showFloatTip("继续使用并行下载。");
-                        },
-                    }
-                );
-                if (!continueDownload) {
-                    return; // 如果用户取消下载，则退出
-                }
-            }
-
             if (config.enableStreaming) {
                 this.uiManager.showFloatTip("正在初始化流式下载...");
                 await this.fileManager.initializeZipStream(
@@ -4565,6 +4521,54 @@
                     )} 篇，共 ${url_list.length} 篇。（总文章数：${totalArticleCount}）`
                 );
             }
+
+            const taskCount = Math.min(url_list.length, config.endArticleIndex) - Math.max(1, config.startArticleIndex) + 1;
+            if (taskCount >= 100 && config.parallelDownload && !config.fastDownload) {
+                let continueDownload = true;
+                await this.uiManager.showDialog(
+                    {
+                        title: "ℹ️ 提示",
+                        message: `检测到文章数量超过100篇（将要下载${taskCount}篇，总${url_list.length}篇），\n使用并行下载可能会导致CSDN风控或者内存溢出。\n建议改用串行（慢些）或者启用快速模式（避免内存溢出崩溃）。\n请注意，继续当前模式预计需要${Utils.formatFileSize(
+                            taskCount * 30 * 1024 * 1024
+                        )}内存。`,
+                    },
+                    {
+                        text: "取消下载",
+                        type: "default",
+                        callback: () => {
+                            this.uiManager.showFloatTip("已取消下载。", 3000, 3000);
+                            continueDownload = false; // 取消下载
+                        },
+                    },
+                    {
+                        text: "取消并行，使用串行",
+                        type: "primary",
+                        callback: () => {
+                            config.parallelDownload = false; // 串行下载
+                            this.uiManager.showFloatTip("已切换为串行下载。");
+                        },
+                    },
+                    {
+                        text: "启用快速模式",
+                        type: "primary",
+                        callback: () => {
+                            config.fastDownload = true; // 启用快速下载
+                            this.uiManager.showFloatTip("已启用快速下载模式。");
+                        },
+                    },
+                    {
+                        text: "继续使用并行下载",
+                        type: "danger",
+                        callback: () => {
+                            this.uiManager.showFloatTip("继续使用并行下载。");
+                        },
+                    }
+                );
+                if (!continueDownload) {
+                    return; // 如果用户取消下载，则退出
+                }
+            }
+
             await Utils.parallelPool(
                 url_list,
                 async (url, index) => {
@@ -4830,50 +4834,6 @@
                 }
             }
 
-            if (url_list.length >= 100 && config.parallelDownload && !config.fastDownload) {
-                let continueDownload = true;
-                await this.uiManager.showDialog(
-                    {
-                        title: "ℹ️ 提示",
-                        message: `检测到文章数量超过100篇（获取到${url_list.length}篇），\n使用并行下载可能会导致CSDN风控或者内存溢出。\n建议改用串行（慢些）或者启用快速模式（避免内存溢出崩溃）。`,
-                    },
-                    {
-                        text: "取消下载",
-                        type: "primary",
-                        callback: () => {
-                            this.uiManager.showFloatTip("已取消下载。");
-                            continueDownload = false; // 取消下载
-                        },
-                    },
-                    {
-                        text: "取消并行，使用串行",
-                        type: "default",
-                        callback: () => {
-                            config.parallelDownload = false; // 串行下载
-                            this.uiManager.showFloatTip("已切换为串行下载。");
-                        },
-                    },
-                    {
-                        text: "启用快速模式",
-                        type: "default",
-                        callback: () => {
-                            config.fastDownload = true; // 启用快速下载
-                            this.uiManager.showFloatTip("已启用快速下载模式。");
-                        },
-                    },
-                    {
-                        text: "继续使用并行下载",
-                        type: "danger",
-                        callback: () => {
-                            this.uiManager.showFloatTip("继续使用并行下载。");
-                        },
-                    }
-                );
-                if (!continueDownload) {
-                    return; // 如果用户取消下载，则退出
-                }
-            }
-
             if (config.enableStreaming) {
                 this.uiManager.showFloatTip("正在初始化流式下载...");
                 await this.fileManager.initializeZipStream(
@@ -4929,6 +4889,54 @@
                     )} 篇，共 ${url_list.length} 篇。（总文章数：${totalArticleCount}）`
                 );
             }
+
+            const taskCount = Math.min(url_list.length, config.endArticleIndex) - Math.max(1, config.startArticleIndex) + 1;
+            if (taskCount >= 100 && config.parallelDownload && !config.fastDownload) {
+                let continueDownload = true;
+                await this.uiManager.showDialog(
+                    {
+                        title: "ℹ️ 提示",
+                        message: `检测到文章数量超过100篇（将要下载${taskCount}篇，总${url_list.length}篇），\n使用并行下载可能会导致CSDN风控或者内存溢出。\n建议改用串行（慢些）或者启用快速模式（避免内存溢出崩溃）。\n请注意，继续当前模式预计需要${Utils.formatFileSize(
+                            taskCount * 30 * 1024 * 1024
+                        )}内存。`,
+                    },
+                    {
+                        text: "取消下载",
+                        type: "default",
+                        callback: () => {
+                            this.uiManager.showFloatTip("已取消下载。", 3000);
+                            continueDownload = false; // 取消下载
+                        },
+                    },
+                    {
+                        text: "取消并行，使用串行",
+                        type: "primary",
+                        callback: () => {
+                            config.parallelDownload = false; // 串行下载
+                            this.uiManager.showFloatTip("已切换为串行下载。");
+                        },
+                    },
+                    {
+                        text: "启用快速模式",
+                        type: "primary",
+                        callback: () => {
+                            config.fastDownload = true; // 启用快速下载
+                            this.uiManager.showFloatTip("已启用快速下载模式。");
+                        },
+                    },
+                    {
+                        text: "继续使用并行下载",
+                        type: "danger",
+                        callback: () => {
+                            this.uiManager.showFloatTip("继续使用并行下载。");
+                        },
+                    }
+                );
+                if (!continueDownload) {
+                    return; // 如果用户取消下载，则退出
+                }
+            }
+
             await Utils.parallelPool(
                 url_list,
                 async (url, index) => {
