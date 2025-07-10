@@ -13,9 +13,9 @@
 // @run-at       document-idle
 // @license      PolyForm Strict License 1.0.0  https://polyformproject.org/licenses/strict/1.0.0/
 // @supportURL   https://github.com/Qalxry/csdn2md
-// @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js
-// @require      https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.min.js
-// @require      https://cdn.jsdelivr.net/npm/streamsaver@2.0.6/StreamSaver.min.js
+// @require      https://cdn.jsdmirror.com/gh/Qalxry/csdn2md/plugins/jszip.min.js#sha256-yeSlK6wYruTz+Q0F+8pgP1sPW/HOjEXmC7TtOiyy7YY=
+// @require      https://cdn.jsdmirror.com/gh/Qalxry/csdn2md/plugins/fflate.min.js#sha256-w7NPLp9edNTX1k4BysegwBlUxsQGQU1CGFx7U9aHXd8=
+// @require      https://cdn.jsdmirror.com/gh/Qalxry/csdn2md/plugins/streamSaver.min.js#sha256-VxQm++CYEdHipBjKWh4QQHHOYZmyo8F/7dJQxG11xFM=
 // ==/UserScript==
 
 (function () {
@@ -26,6 +26,8 @@
         JSZip: {
             isLoaded: () => typeof JSZip !== "undefined",
             urls: [
+                "https://cdn.jsdelivr.net/gh/Qalxry/csdn2md/plugins/jszip.min.js#sha256-yeSlK6wYruTz+Q0F+8pgP1sPW/HOjEXmC7TtOiyy7YY=",
+                "https://cdn.jsdmirror.com/gh/Qalxry/csdn2md/plugins/jszip.min.js#sha256-yeSlK6wYruTz+Q0F+8pgP1sPW/HOjEXmC7TtOiyy7YY=",
                 "https://cdnjs.webstatic.cn/ajax/libs/jszip/3.7.1/jszip.min.js#sha256-yeSlK6wYruTz+Q0F+8pgP1sPW/HOjEXmC7TtOiyy7YY=",
                 "https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/jszip/3.7.1/jszip.min.js#sha256-yeSlK6wYruTz+Q0F+8pgP1sPW/HOjEXmC7TtOiyy7YY=",
                 "https://use.sevencdn.com/ajax/libs/jszip/3.7.1/jszip.min.js#sha256-yeSlK6wYruTz+Q0F+8pgP1sPW/HOjEXmC7TtOiyy7YY=",
@@ -36,6 +38,8 @@
         fflate: {
             isLoaded: () => typeof fflate !== "undefined",
             urls: [
+                "https://cdn.jsdelivr.net/gh/Qalxry/csdn2md/plugins/fflate.min.js#sha256-w7NPLp9edNTX1k4BysegwBlUxsQGQU1CGFx7U9aHXd8=",
+                "https://cdn.jsdmirror.com/gh/Qalxry/csdn2md/plugins/fflate.min.js#sha256-w7NPLp9edNTX1k4BysegwBlUxsQGQU1CGFx7U9aHXd8=",
                 "https://npm.webcache.cn/fflate@0.8.2/umd/index.js#sha256-w7NPLp9edNTX1k4BysegwBlUxsQGQU1CGFx7U9aHXd8=",
                 "https://use.sevencdn.com/npm/fflate@0.8.2/umd/index.js#sha256-w7NPLp9edNTX1k4BysegwBlUxsQGQU1CGFx7U9aHXd8=",
                 "https://cdn.jsdmirror.com/npm/fflate@0.8.2/umd/index.js#sha256-w7NPLp9edNTX1k4BysegwBlUxsQGQU1CGFx7U9aHXd8=",
@@ -46,9 +50,11 @@
         streamSaver: {
             isLoaded: () => typeof streamSaver !== "undefined",
             urls: [
-                "https://cdn.jsdmirror.com/npm/streamsaver@2.0.6/StreamSaver.min.js#sha256-w7NPLp9edNTX1k4BysegwBlUxsQGQU1CGFx7U9aHXd8=",
+                "https://cdn.jsdelivr.net/gh/Qalxry/csdn2md/plugins/streamSaver.min.js#sha256-VxQm++CYEdHipBjKWh4QQHHOYZmyo8F/7dJQxG11xFM=",
+                "https://cdn.jsdmirror.com/gh/Qalxry/csdn2md/plugins/streamSaver.min.js#sha256-VxQm++CYEdHipBjKWh4QQHHOYZmyo8F/7dJQxG11xFM=",
                 "https://use.sevencdn.com/npm/streamsaver@2.0.6/StreamSaver.min.js",
                 "https://cdn.jsdelivr.net/npm/streamsaver@2.0.6/StreamSaver.min.js",
+                "https://cdn.jsdmirror.com/npm/streamsaver@2.0.6/StreamSaver.min.js",
             ],
         },
     };
