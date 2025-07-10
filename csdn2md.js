@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      3.2.0
+// @version      3.2.2
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -13,6 +13,7 @@
 // @run-at       document-idle
 // @license      PolyForm Strict License 1.0.0  https://polyformproject.org/licenses/strict/1.0.0/
 // @supportURL   https://github.com/Qalxry/csdn2md
+// @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.7.1/jszip.min.js
 // @require      https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.min.js
 // @require      https://cdn.jsdelivr.net/npm/streamsaver@2.0.6/StreamSaver.min.js
 // ==/UserScript==
@@ -870,7 +871,8 @@
                 min: 0,
                 max: 60000,
                 step: 1,
-                tooltip: "每次下载文章之间的延时，单位毫秒。<br>在并行时每个worker的间隔是独立的。<br>用于进一步减慢串行下载避免风控（放到最慢）",
+                tooltip:
+                    "每次下载文章之间的延时，单位毫秒。<br>在并行时每个worker的间隔是独立的。<br>用于进一步减慢串行下载避免风控（放到最慢）",
             });
             this.addIntOption({
                 id: "downloadAssetRetryCount",
@@ -911,6 +913,17 @@
                 max: 10000,
                 step: 1,
                 tooltip: "下载到第几篇文章，超出范围则下载到最后一篇<br>避免一次下载多篇文章时风控，用于分批下载",
+            });
+            this.addSelectOption({
+                id: "zipLibrary",
+                label: "压缩文件时使用的库",
+                defaultValue: "fflate",
+                container: advancedDownloadGroup,
+                options: [
+                    { value: "fflate", label: "fflate（默认，更快）" },
+                    { value: "jszip", label: "JSZip（备选，较慢）" },
+                ],
+                tooltip: "如果提示没有找到fflate，请尝试切换到jszip。<br>流式压缩下载时只能使用fflate。",
             });
             this.addBoolOption({
                 id: "enableStreaming",
@@ -2522,10 +2535,17 @@
         }
 
         /**
-         * 将文件队列打包为ZIP下载
+         * 将文件队列打包为ZIP下载（fflate）
          * @param {string} zipName - ZIP文件名
          */
-        async zipAllFilesInQueue(zipName, progressCallback = null, finalCallback = null) {
+        async zipAllFilesInQueue(zipName, progressCallback = null, finalCallback = null, api = "fflate") {
+            // 检查是否有 fflate 库
+            if (typeof fflate === "undefined" || api !== "fflate") {
+                // 如果没有 fflate 库，使用 jszip 作为备选方案
+                console.warn("使用 jszip 作为备选方案");
+                return this.zipAllFilesInQueue_jszip(zipName, progressCallback, finalCallback);
+            }
+
             if (this.fileQueue.length === 0) {
                 console.dir("没有文件需要保存");
                 return;
@@ -2594,6 +2614,7 @@
                     console.error("Error generating ZIP file:", error);
                     if (finalCallback && typeof finalCallback === "function") {
                         finalCallback(`下载失败：${zipName}，错误信息：${error}`);
+                        this.reset(); // 清空文件队列
                         throw new Error(`下载失败：${zipName}，错误信息：${error}`);
                     }
                 }
@@ -2614,6 +2635,97 @@
                 filename: zipName,
                 type: "application/zip",
                 content: zipBlob,
+            });
+        }
+
+        /**
+         * 将文件队列打包为ZIP下载
+         * @param {string} zipName - ZIP文件名
+         */
+        async zipAllFilesInQueue_jszip(zipName, progressCallback = null, finalCallback = null) {
+            if (this.fileQueue.length === 0) {
+                console.error("没有文件需要保存");
+                return;
+            }
+
+            if (!zipName.endsWith(".zip")) {
+                zipName = zipName + ".zip"; // 确保ZIP文件名以.zip结尾
+            }
+
+            zipName = Utils.safeFilename(zipName);
+
+            // 创建JSZip实例
+            const zip = new JSZip();
+
+            // 使用 for...of 循环替代 forEach，以便正确处理 async/await
+            for (let idx = 0; idx < this.fileQueue.length; idx++) {
+                let status = true;
+                const file = this.fileQueue[idx];
+                // content 可能是 promise（Blob对象），需要等待
+                if (file.content instanceof Promise) {
+                    if (progressCallback) {
+                        progressCallback(`正在下载资源：${file.filename} (${idx + 1}/${this.fileQueue.length})`);
+                    }
+                    try {
+                        file.content = await file.content; // 等待Blob对象
+                    } catch (err) {
+                        if (progressCallback) {
+                            progressCallback(`下载资源失败：${err}`);
+                        }
+                        status = false;
+                    }
+                }
+                if (!status) {
+                    continue; // 如果下载失败，跳过当前文件
+                }
+                // 将文件添加到ZIP中
+                zip.file(file.filename, file.content);
+            }
+
+            // 获取当前时间，以便计算剩余时间
+            const startTime = Date.now();
+
+            return new Promise((resolve, reject) => {
+                // 生成ZIP文件
+                zip.generateAsync({ type: "blob" }, (metadata) => {
+                    // 进度回调
+                    if (progressCallback) {
+                        // metadata.percent: 当前进度百分比
+                        // metadata.currentFile: 当前正在处理的文件名
+                        progressCallback(
+                            `正在打包：${metadata.currentFile} (${Math.round(
+                                metadata.percent
+                            )}%)(剩余时间：${Utils.formatSeconds(
+                                ((Date.now() - startTime) / 1000 / metadata.percent) * (100 - metadata.percent)
+                            )})`
+                        );
+                    }
+                })
+                    .then((blob) => {
+                        // 调用最终回调
+                        if (finalCallback) {
+                            finalCallback(
+                                `打包完成：${zipName}，文件大小：${Utils.formatFileSize(blob.size)}\n请等待下载完成。`
+                            );
+                        }
+                        this.reset(); // 清空文件队列
+                        this.fileQueue.push({
+                            filename: zipName,
+                            type: "application/zip",
+                            content: blob,
+                        });
+                        resolve();
+                    })
+                    .catch((error) => {
+                        // 处理错误
+                        this.reset(); // 清空文件队列
+                        console.error("Error generating ZIP file:", error);
+                        if (finalCallback) {
+                            finalCallback(`下载失败：${zipName}，错误信息：${error}`);
+                            throw new Error(`下载失败：${zipName}，错误信息：${error}`);
+                        }
+                        reject(error);
+                    });
             });
         }
 
@@ -4166,20 +4278,15 @@
             // 下载每篇文章
             const totalArticleCount = url_list.length;
             if (config.endArticleIndex < 1) {
-                this.uiManager.showFloatTip(
-                    `结束文章索引 ${config.endArticleIndex} 小于1，将不下载任何文章。`,
-                    3000
-                );
+                this.uiManager.showFloatTip(`结束文章索引 ${config.endArticleIndex} 小于1，将不下载任何文章。`, 3000);
                 return;
-            }
-            else if (config.startArticleIndex > totalArticleCount) {
+            } else if (config.startArticleIndex > totalArticleCount) {
                 this.uiManager.showFloatTip(
                     `开始文章索引 ${config.startArticleIndex} 超过总文章数 ${totalArticleCount}，将不下载任何文章。`,
                     3000
                 );
                 return;
-            }
-            else if (config.startArticleIndex > config.endArticleIndex) {
+            } else if (config.startArticleIndex > config.endArticleIndex) {
                 this.uiManager.showFloatTip(
                     `开始文章索引 ${config.startArticleIndex} 大于结束文章索引 ${config.endArticleIndex}，将不下载任何文章。`,
                     3000
@@ -4187,7 +4294,7 @@
                 return;
             } else {
                 this.uiManager.showFloatTip(
-                    `开始下载文章：从第 ${config.startArticleIndex} 篇到第 ${config.endArticleIndex} 篇，共 ${url_list.length} 篇。（总文章数：${totalArticleCount}）` 
+                    `开始下载文章：从第 ${Math.max(1, config.startArticleIndex)} 篇到第 ${Math.min(totalArticleCount, config.endArticleIndex)} 篇，共 ${url_list.length} 篇。（总文章数：${totalArticleCount}）`
                 );
             }
             await Utils.parallelPool(
@@ -4195,7 +4302,7 @@
                 async (url, index) => {
                     const articleIndex = totalArticleCount - index; // 反向
                     if (articleIndex >= config.startArticleIndex && articleIndex <= config.endArticleIndex) {
-                       await this.downloadOneArticleFromBatch(url, articleIndex, totalArticleCount, config);
+                        await this.downloadOneArticleFromBatch(url, articleIndex, totalArticleCount, config);
                     }
                 },
                 config.parallelDownload ? config.maxConcurrentDownloads : 1
@@ -4238,7 +4345,9 @@
                         },
                         (info_string) => {
                             this.uiManager.showFloatTip(info_string, 3000);
-                        }
+                        },
+                        // zip 库选用：fflate / jszip
+                        config.zipLibrary || "fflate"
                     );
                 }
                 await this.fileManager.downloadAllFilesInQueue();
@@ -4500,20 +4609,15 @@
             // 下载每篇文章
             const totalArticleCount = url_list.length;
             if (config.endArticleIndex < 1) {
-                this.uiManager.showFloatTip(
-                    `结束文章索引 ${config.endArticleIndex} 小于1，将不下载任何文章。`,
-                    3000
-                );
+                this.uiManager.showFloatTip(`结束文章索引 ${config.endArticleIndex} 小于1，将不下载任何文章。`, 3000);
                 return;
-            }
-            else if (config.startArticleIndex > totalArticleCount) {
+            } else if (config.startArticleIndex > totalArticleCount) {
                 this.uiManager.showFloatTip(
                     `开始文章索引 ${config.startArticleIndex} 超过总文章数 ${totalArticleCount}，将不下载任何文章。`,
                     3000
                 );
                 return;
-            }
-            else if (config.startArticleIndex > config.endArticleIndex) {
+            } else if (config.startArticleIndex > config.endArticleIndex) {
                 this.uiManager.showFloatTip(
                     `开始文章索引 ${config.startArticleIndex} 大于结束文章索引 ${config.endArticleIndex}，将不下载任何文章。`,
                     3000
@@ -4521,7 +4625,7 @@
                 return;
             } else {
                 this.uiManager.showFloatTip(
-                    `开始下载文章：从第 ${config.startArticleIndex} 篇到第 ${config.endArticleIndex} 篇，共 ${url_list.length} 篇。（总文章数：${totalArticleCount}）` 
+                    `开始下载文章：从第 ${Math.max(1, config.startArticleIndex)} 篇到第 ${Math.min(totalArticleCount, config.endArticleIndex)} 篇，共 ${url_list.length} 篇。（总文章数：${totalArticleCount}）`
                 );
             }
             await Utils.parallelPool(
@@ -4529,7 +4633,7 @@
                 async (url, index) => {
                     const articleIndex = totalArticleCount - index; // 反向
                     if (articleIndex >= config.startArticleIndex && articleIndex <= config.endArticleIndex) {
-                       await this.downloadOneArticleFromBatch(url, articleIndex, totalArticleCount, config);
+                        await this.downloadOneArticleFromBatch(url, articleIndex, totalArticleCount, config);
                     }
                 },
                 config.parallelDownload ? config.maxConcurrentDownloads : 1
@@ -4559,7 +4663,9 @@
                         },
                         (info_string) => {
                             this.uiManager.showFloatTip(info_string, 3000);
-                        }
+                        },
+                        // zip 库选用：fflate / jszip
+                        config.zipLibrary || "fflate"
                     );
                 }
                 await this.fileManager.downloadAllFilesInQueue();
@@ -4605,7 +4711,9 @@
                     },
                     (info_string) => {
                         this.uiManager.showFloatTip(info_string, 3000);
-                    }
+                    },
+                    // zip 库选用：fflate / jszip
+                    config.zipLibrary || "fflate"
                 );
             }
             await this.fileManager.downloadAllFilesInQueue();
