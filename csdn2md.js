@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      3.3.2
+// @version      3.3.3
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -3100,8 +3100,9 @@
 
             // 1. 连续的 "\n" 与 CONSTANT_DOUBLE_NEW_LINE 替换为 "\n\n"
             this.RE_DOUBLE_NL = new RegExp(`(?:\\n|${this.DDNL})*${this.DDNL}(?:\\n|${this.DDNL})*`, "g");
-            // 2. 连续的 SEPARATION_BEAUTIFICATION 替换为 " "，但如果前面是换行符，替换为 ""
+            // 2. 连续的 SEPARATION_BEAUTIFICATION 替换为 " "，但如果前面是开头或换行符，替换为 ""
             this.RE_SEP_NOLINE = new RegExp(`(?<!\\n)(?:${this.SEPB})+`, "g");
+            this.RE_SEP_BEGIN = new RegExp(`^(?:${this.SEPB})+`, "g");
             this.RE_SEP_WITHNL = new RegExp(`(\\n)(?:${this.SEPB})+`, "g");
 
             // 节点类型常量
@@ -3243,13 +3244,24 @@
         /**
          * 后处理Markdown内容
          * @param {string} markdown - 原始Markdown内容
+         * @param {Object} config - 配置选项
+         * @param {string} [config.doubleNlReplacement="\n\n"] - 替换连续换行的字符串
+         * @param {string} [config.sepNoLineReplacement=" "] - 替换非换行前的分隔符字符串
+         * @param {string} [config.sepWithNlReplacement="$1"] - 替换换行前的分隔符字符串
          * @returns {string} 处理后的Markdown内容
          */
-        postProcessMarkdown(markdown) {
+        postProcessMarkdown(markdown, config={}) {
+            const {
+                doubleNlReplacement = "\n\n",
+                sepBeginReplacement = "",
+                sepWithNlReplacement = "\n",
+                sepNoLineReplacement = " ",
+            } = config;
             return markdown
-                .replaceAll(this.RE_DOUBLE_NL, "\n\n") // 吃掉前后重复换行和标记，统一为两个换行
-                .replaceAll(this.RE_SEP_NOLINE, " ") // 非换行前的标记串 → 空格
-                .replaceAll(this.RE_SEP_WITHNL, "$1"); // 换行后的标记串 → 保留换行
+                .replaceAll(this.RE_DOUBLE_NL, doubleNlReplacement)   // 吃掉前后重复换行和标记，统一为两个换行
+                .replaceAll(this.RE_SEP_BEGIN, sepBeginReplacement)   // 最开始前的标记串 → 忽略
+                .replaceAll(this.RE_SEP_WITHNL, sepWithNlReplacement) // 换行后的标记串 → 保留换行
+                .replaceAll(this.RE_SEP_NOLINE, sepNoLineReplacement) // 非换行前的标记串 → 空格
         }
 
         /****************************************
@@ -3475,7 +3487,7 @@
                 let childText = await this.processChildren(child, newContext);
 
                 // 处理嵌套列表的换行和缩进
-                childText = childText.replaceAll(this.RE_DOUBLE_NL, "\n\n");
+                childText = this.postProcessMarkdown(childText).trim();
 
                 // 对除第一行外的所有行添加缩进
                 childText = childText
@@ -3500,13 +3512,15 @@
          */
         async handleBlockquote(node, context) {
             // 处理每一行，添加引用标记 >
-            const text = (await this.processChildren(node, context))
-                .trim()
+            const text = (await this.processChildren(node, context)).trim();
+
+            // 提前后处理
+            const procText = this.postProcessMarkdown(text)
                 .split("\n")
                 .map((line) => (line ? `> ${line}` : "> "))
                 .join("\n");
 
-            return `${text}\n\n`;
+            return `${procText}${this.CONSTANT_DOUBLE_NEW_LINE}`;
         }
 
         /**
@@ -3581,7 +3595,10 @@
             const headers = await Promise.all(
                 headerCells.map(async (cell) => {
                     const content = await this.processNode(cell, context);
-                    return content.trim().replaceAll(this.RE_DOUBLE_NL, "<br />");
+                    // return content.trim().replaceAll(this.RE_DOUBLE_NL, "<br />");
+                    return this.postProcessMarkdown(content.trim(), {
+                        doubleNlReplacement: "<br />"
+                    })
                 })
             );
 
@@ -3604,7 +3621,10 @@
                 const rowContent = await Promise.all(
                     cells.map(async (cell) => {
                         const content = await this.processNode(cell, context);
-                        return content.trim().replaceAll(this.RE_DOUBLE_NL, "<br />");
+                        // return content.trim().replaceAll(this.RE_DOUBLE_NL, "<br />");
+                        return this.postProcessMarkdown(content.trim(), {
+                            doubleNlReplacement: "<br />"
+                        })
                     })
                 );
 
