@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      3.3.4
+// @version      3.3.5
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -18,6 +18,7 @@
 // @require      https://cdn.jsdmirror.com/gh/Qalxry/csdn2md/plugins/streamSaver.min.js#sha256-VxQm++CYEdHipBjKWh4QQHHOYZmyo8F/7dJQxG11xFM=
 // ==/UserScript==
 
+// TODO 增加显示版本号和最新版本功能
 (function () {
     "use strict";
 
@@ -4136,21 +4137,25 @@
                 // 文章标题
                 const meta_title = config.addSerialNumberToTitle ? `${padNo} ${articleTitle}` : articleTitle;
                 // 文章日期 YYYY-MM-DD HH:MM:SS
-                const meta_date =
-                    article_info_box
-                        ?.querySelector(".time")
-                        ?.textContent.match(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/)[0] || "";
-                let articleMeta = `title: ${meta_title}\ndate: ${meta_date}\n`;
+                // const meta_date =
+                //     article_info_box
+                //         ?.querySelector(".time")
+                //         ?.textContent.match(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/)[0] || "";
+                const article_time_box = doc_body.querySelector(".time");
+                const meta_date = article_time_box?.getAttribute("data-time")
+                                  || article_time_box?.textContent.match(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/)[0]
+                                  || "";
+                let articleMeta = `title: "${meta_title}"\ndate: ${meta_date}\n`;
                 // 文章分类和标签
                 if (article_info_box) {
-                    const meta_category_and_tags = Array.from(article_info_box.querySelectorAll(".tag-link")) || [];
-                    if (meta_category_and_tags.length > 0 && article_info_box.textContent.includes("分类专栏")) {
-                        articleMeta += `categories:\n- ${meta_category_and_tags[0].textContent}\n`;
-                        meta_category_and_tags.shift();
+                    const meta_category = doc_body.querySelector(".tool-directory > a");
+                    if (meta_category?.getAttribute("data-title")) {
+                        articleMeta += `category: "${meta_category.getAttribute("data-title")}"\n`;
                     }
-                    if (meta_category_and_tags.length > 0 && article_info_box.textContent.includes("文章标签")) {
-                        articleMeta += `tags:\n${Array.from(meta_category_and_tags)
-                            .map((tag) => `- ${tag.textContent}`)
+                    const meta_tags = Array.from(article_info_box.querySelectorAll(".tag-link, .tag-link-new"));
+                    if (meta_tags.length > 0) {
+                        articleMeta += `tags:\n${Array.from(meta_tags)
+                            .map((tag) => `- "${tag.textContent.slice(1)}"`)
                             .join("\n")}\n`;
                     }
                 }
