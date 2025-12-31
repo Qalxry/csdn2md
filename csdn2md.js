@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      3.3.5
+// @version      3.3.6
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -266,6 +266,17 @@
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
         },
+
+        // ---------- 新增：把 SVG 序列化字符串里的 <br> 规范化为 XML 自闭合形式 <br/> ----------
+        // 说明：采用字符串替换是最简单可靠的方式，能够处理 <br>, <br >, <br/>, <br />, 大小写等情况。
+        // 只针对要输出的 SVG 字符串进行替换（不改变原 DOM 对象）。
+        normalizeBrToSelfClosing(svgString) {
+            // 把所有 <br ...> / <br> / <br/> / <br /> 都规范成 <br/>
+            // \b 确保是单词边界（匹配 br），[^>]* 捕获可能的空格或属性（通常没有属性）
+            // 最简单、兼容的写法：
+            return svgString.replace(/<br\s*\/?>/gi, '<br/>');
+        }
+        // ------------------------------------------------------------------------------------
     };
 
     /**
@@ -3251,7 +3262,7 @@
          * @param {string} [config.sepWithNlReplacement="$1"] - 替换换行前的分隔符字符串
          * @returns {string} 处理后的Markdown内容
          */
-        postProcessMarkdown(markdown, config={}) {
+        postProcessMarkdown(markdown, config = {}) {
             const {
                 doubleNlReplacement = "\n\n",
                 sepBeginReplacement = "",
@@ -3259,10 +3270,10 @@
                 sepNoLineReplacement = " ",
             } = config;
             return markdown
-                .replaceAll(this.RE_DOUBLE_NL, doubleNlReplacement)   // 吃掉前后重复换行和标记，统一为两个换行
-                .replaceAll(this.RE_SEP_BEGIN, sepBeginReplacement)   // 最开始前的标记串 → 忽略
+                .replaceAll(this.RE_DOUBLE_NL, doubleNlReplacement) // 吃掉前后重复换行和标记，统一为两个换行
+                .replaceAll(this.RE_SEP_BEGIN, sepBeginReplacement) // 最开始前的标记串 → 忽略
                 .replaceAll(this.RE_SEP_WITHNL, sepWithNlReplacement) // 换行后的标记串 → 保留换行
-                .replaceAll(this.RE_SEP_NOLINE, sepNoLineReplacement) // 非换行前的标记串 → 空格
+                .replaceAll(this.RE_SEP_NOLINE, sepNoLineReplacement); // 非换行前的标记串 → 空格
         }
 
         /****************************************
@@ -3616,54 +3627,145 @@
             const rows = Array.from(node.querySelectorAll("tr"));
             if (rows.length === 0) return "";
 
-            let table = "";
+            // 将包含跨行/跨列的表格规范化为二维网格
+            const grid = [];
+            const alignments = [];
 
-            // 处理表头
-            const headerCells = Array.from(rows[0].querySelectorAll("th, td"));
+            // 解析 rowspan/colspan，异常值回落为 1
+            const parseSpan = (value) => {
+                const n = parseInt(value || "1", 10);
+                return Number.isFinite(n) && n > 0 ? n : 1;
+            };
 
-            const headers = await Promise.all(
-                headerCells.map(async (cell) => {
-                    const content = await this.processNode(cell, context);
-                    // return content.trim().replaceAll(this.RE_DOUBLE_NL, "<br />");
-                    return this.postProcessMarkdown(content.trim(), {
-                        doubleNlReplacement: "<br />"
-                    })
-                })
-            );
-
-            table += `| ${headers.join(" | ")} |\n`;
-
-            // 处理分隔符行（对齐方式）
-            const alignments = headerCells.map((cell) => {
+            // 解析对齐信息，缺省为居中
+            const resolveAlign = (cell) => {
                 const align = cell.getAttribute("align");
                 if (align === "center") return ":---:";
                 if (align === "right") return "---:";
                 if (align === "left") return ":---";
-                return ":---:"; // 默认居中
+                return ":---:";
+            };
+
+            // 填充网格
+            for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+                const row = rows[rowIndex];
+                const rowCells = Array.from(row.querySelectorAll("th, td"));
+                grid[rowIndex] = grid[rowIndex] || [];
+
+                let colPointer = 0;
+
+                for (const cell of rowCells) {
+                    // 跳过被rowspan占用的位置
+                    while (grid[rowIndex][colPointer] !== undefined) {
+                        colPointer++;
+                    }
+
+                    // 解析单元格的colspan和rowspan
+                    const colspan = parseSpan(cell.getAttribute("colspan"));
+                    const rowspan = parseSpan(cell.getAttribute("rowspan"));
+                    const content = await this.processNode(cell, context);
+
+                    // 首行记录每一列的对齐方式（跨列则复制）
+                    if (rowIndex === 0) {
+                        const align = resolveAlign(cell);
+                        for (let i = 0; i < colspan; i++) {
+                            alignments[colPointer + i] = align;
+                        }
+                    }
+
+                    // 将跨行/跨列展开填入网格，占位格用空格
+                    for (let r = 0; r < rowspan; r++) {
+                        const targetRowIndex = rowIndex + r;
+                        grid[targetRowIndex] = grid[targetRowIndex] || [];
+                        for (let c = 0; c < colspan; c++) {
+                            const targetColIndex = colPointer + c;
+                            const isOrigin = r === 0 && c === 0;
+                            if (grid[targetRowIndex][targetColIndex] === undefined) {
+                                grid[targetRowIndex][targetColIndex] = isOrigin ? content : " ";
+                            }
+                        }
+                    }
+
+                    // 移动列指针到下一个可写入位置（已考虑当前单元格的colspan）
+                    colPointer += colspan;
+                }
+            }
+
+            // 统计最大列数，兼容跨行填充导致的行宽差异
+            let maxCols = alignments.length;
+            for (const row of grid) {
+                if (row) {
+                    maxCols = Math.max(maxCols, row.length);
+                }
+            }
+
+            if (maxCols === 0) return "";
+
+            // 缺失的对齐信息回落为居中
+            for (let i = 0; i < maxCols; i++) {
+                if (!alignments[i]) {
+                    alignments[i] = ":---:";
+                }
+            }
+
+            // 行长度补齐，避免列数不一致
+            const normalizedRows = grid.map((row = []) => {
+                const normalized = row.slice();
+                for (let i = 0; i < maxCols; i++) {
+                    if (normalized[i] === undefined) normalized[i] = " ";
+                }
+                return normalized;
             });
 
+            // 首行作为表头，缺失时用占位空格
+            const headerRow = normalizedRows[0] || Array(maxCols).fill(" ");
+            // 拼接表头与对齐行
+            let table = `| ${headerRow.join(" | ")} |\n`;
             table += `|${alignments.join("|")}|\n`;
 
-            // 处理表格内容行
-            for (let i = 1; i < rows.length; i++) {
-                const cells = Array.from(rows[i].querySelectorAll("td"));
-                const rowContent = await Promise.all(
-                    cells.map(async (cell) => {
-                        const content = await this.processNode(cell, context);
-                        // return content.trim().replaceAll(this.RE_DOUBLE_NL, "<br />");
-                        return this.postProcessMarkdown(content.trim(), {
-                            doubleNlReplacement: "<br />"
-                        })
-                    })
-                );
-
-                table += `| ${rowContent.join(" | ")} |`;
-                if (i < rows.length - 1) {
+            // 逐行输出表体，保持列数一致
+            for (let i = 1; i < normalizedRows.length; i++) {
+                table += `| ${normalizedRows[i].join(" | ")} |`;
+                if (i < normalizedRows.length - 1) {
                     table += "\n";
                 }
             }
 
             return table + "\n\n";
+        }
+        
+        /**
+         * 处理表格单元格元素
+         * - 将单元格内的换行规范为 <br/>
+         * - 转义表格分隔符 |
+         * - 清理多余空白与占位换行标记
+         */
+        async handleTableCell(node, context) {
+            // 递归处理子节点
+            let content = await this.processChildren(node, context);
+
+            // 去除首尾空白
+            content = content.trim();
+
+            // 先做统一的后处理，把双换行标记替换为 <br/>
+            content = this.postProcessMarkdown(content, {
+                doubleNlReplacement: "<br/>",
+                sepBeginReplacement: "",
+                sepWithNlReplacement: "<br/>",
+                sepNoLineReplacement: " ",
+            });
+
+            // 把剩余的换行符也替换为 <br/>
+            content = content.replace(/\n/g, "<br/>");
+
+            // 统一 <br> 形式
+            content = Utils.normalizeBrToSelfClosing(content);
+
+            // 转义 Markdown 表格的分隔符 |
+            content = content.replace(/\|/g, "\\|");
+
+            // 避免空字符串导致表格列错位，至少返回一个空格
+            return content === "" ? " " : content;
         }
 
         /**
@@ -3833,10 +3935,13 @@
                 });
             }
 
+            // 规范化SVG字符串，确保<br>标签自闭合
+            const normalizedSvgString = Utils.normalizeBrToSelfClosing(node.outerHTML);
+
             // 保存SVG图像
             if (context.saveWebImages) {
                 const svgSavePath = await this.fileManager.addSvgFile(
-                    node.outerHTML,
+                    normalizedSvgString,
                     context.assetDirName,
                     context.imgPrefix,
                     context.enableStreaming
@@ -3845,10 +3950,10 @@
             } else {
                 // 检查是否有style标签存在于svg元素内，如果有则转换为base64形式
                 if (node.querySelector("style")) {
-                    const base64 = Utils.svgToBase64(node.outerHTML);
+                    const base64 = Utils.svgToBase64(normalizedSvgString);
                     return `![](data:image/svg+xml;base64,${base64})${this.CONSTANT_DOUBLE_NEW_LINE}`;
                 } else {
-                    return `<div align="center">${node.outerHTML}</div>${this.CONSTANT_DOUBLE_NEW_LINE}`;
+                    return `<div align="center">${normalizedSvgString}</div>${this.CONSTANT_DOUBLE_NEW_LINE}`;
                 }
             }
         }
@@ -3896,13 +4001,6 @@
          */
         async handleFont(node, context) {
             // 避免进入 default，直接处理子元素
-            return await this.processChildren(node, context);
-        }
-
-        /**
-         * 处理表格单元格元素
-         */
-        async handleTableCell(node, context) {
             return await this.processChildren(node, context);
         }
 
