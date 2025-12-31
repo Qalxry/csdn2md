@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      3.3.6
+// @version      3.4.0
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -18,7 +18,6 @@
 // @require      https://cdn.jsdmirror.com/gh/Qalxry/csdn2md/plugins/streamSaver.min.js#sha256-VxQm++CYEdHipBjKWh4QQHHOYZmyo8F/7dJQxG11xFM=
 // ==/UserScript==
 
-// TODO 增加显示版本号和最新版本功能
 (function () {
     "use strict";
 
@@ -356,6 +355,7 @@
             this.gotoRepoButton = null;
             this.isOpen = false;
             this.repo_url = "https://github.com/Qalxry/csdn2md";
+            this.updateCheckInterval = 24 * 60 * 60 * 1000;
 
             // 初始化
             this.initStyles();
@@ -436,7 +436,7 @@
                 max-height: 480px;
                 overflow-y: auto;
                 padding-right: 5px;
-                margin: 10px 0;
+                margin: 10px 0px 2px 0px;
                 scrollbar-width: thin;
                 scrollbar-color: rgba(0,0,0,0.3) transparent;
                 position: relative;
@@ -684,9 +684,42 @@
                 margin-top: 3px;
             }
 
+            .tm_footer-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                margin-top: 4px;
+                margin-left: 2px;
+                margin-bottom: -8px;
+            }
+
+            .tm_version-badge {
+                text-align: left;
+                color: #888;
+                font-size: 10px;
+                user-select: none;
+            }
+
+            .tm_footer-link {
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                font-size: 10px;
+                white-space: nowrap;
+                text-decoration: none;
+            }
+            .tm_footer-link:hover {
+                text-decoration: underline !important;
+            }
+            .tm_footer-link svg {
+                width: 12px;
+                height: 12px;
+            }
+
             #myDownloadButton, #myResetButton {
                 text-align: center;
-                padding: 5px 8px;
+                padding: 10px 10px;
                 background: var(--tm_ui-linear-gradient);
                 color: white;
                 cursor: pointer;
@@ -740,7 +773,7 @@
                 background: #000000;
                 color: #ffffff;
                 text-align: center;
-                padding: 5px 8px;
+                padding: 10px 10px;
                 cursor: pointer;
                 transition: all 0.3s ease;
                 border-radius: 3px;
@@ -871,8 +904,36 @@
             this.gotoRepoButton.id = "myGotoRepoButton";
             buttonsContainer.appendChild(this.gotoRepoButton);
 
+            // 底部版本号 + Greasy Fork 链接
+            this.footerRow = document.createElement("div");
+            this.footerRow.className = "tm_footer-row";
+
+            this.versionBadge = document.createElement("div");
+            this.versionBadge.className = "tm_version-badge";
+            this.versionBadge.textContent = `版本 ${GM_info.script.version}`;
+            this.footerRow.appendChild(this.versionBadge);
+
+            this.greasyForkLink = document.createElement("a");
+            this.greasyForkLink.className = "tm_footer-link";
+            this.greasyForkLink.href = "https://greasyfork.org/en/scripts/523540-csdn2md-%E6%89%B9%E9%87%8F%E4%B8%8B%E8%BD%BDcsdn%E6%96%87%E7%AB%A0%E4%B8%BAmarkdown";
+            this.greasyForkLink.target = "_blank";
+            this.greasyForkLink.rel = "noopener noreferrer";
+            this.greasyForkLink.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M5.89 2.227a.28.28 0 0 1 .266.076l5.063 5.062c.54.54.509 1.652-.031 2.192l8.771 8.77c1.356 1.355-.36 3.097-1.73 1.728l-8.772-8.77c-.54.54-1.651.571-2.191.031l-5.063-5.06c-.304-.304.304-.911.608-.608l3.714 3.713L7.59 8.297L3.875 4.582c-.304-.304.304-.911.607-.607l3.715 3.714l1.067-1.066L5.549 2.91c-.228-.228.057-.626.342-.683ZM12 0C5.374 0 0 5.375 0 12s5.374 12 12 12c6.625 0 12-5.375 12-12S18.625 0 12 0" />
+                </svg>
+                <span>在 Greasy Fork 查看/更新</span>
+            `;
+            this.greasyForkLink.style.display = "none";
+            this.footerRow.appendChild(this.greasyForkLink);
+            
+            this.floatWindow.appendChild(this.footerRow);
+
             // 将浮窗添加到内容区
             document.getElementById("tmComplexContent").appendChild(this.floatWindow);
+
+            // 自动检测更新（按开关与时间间隔）
+            this.maybeCheckUpdate();
         }
 
         /**
@@ -1027,7 +1088,14 @@
                     true: [{ id: "zipCategories", value: true }],
                 },
             });
-
+            this.addBoolOption({
+                id: "enableAutoUpdateCheck",
+                label: "自动检测脚本更新",
+                defaultValue: true,
+                container: advancedDownloadGroup,
+                tooltip: "每24小时自动检测 Greasy Fork 是否有新版本。<br>仅在有更新时显示提示链接",
+            });
+            
             // 文章内容组
             const contentGroup = this.createOptionGroup(container, "文章内容设置");
             this.addBoolOption({
@@ -1251,6 +1319,15 @@
                             this.configManager.set(constraint.id, constraint.value);
                             this.updateOption(constraint.id);
                         }
+                    }
+                }
+
+                // 特殊处理：切换自动更新检测
+                if (id === "enableAutoUpdateCheck") {
+                    if (checkbox.checked) {
+                        this.maybeCheckUpdate();
+                    } else {
+                        this.setGreasyLinkVisible(false);
                     }
                 }
             });
@@ -1697,6 +1774,98 @@
             overlay.addEventListener("wheel", preventScroll, { passive: false });
             overlay.addEventListener("touchmove", preventScroll, { passive: false });
             if (overlay) overlay.style.display = "block";
+        }
+
+        /**
+         * 如果开启了自动更新检测，并且距离上次检测超过间隔，则发起一次检测
+         */
+        async maybeCheckUpdate() {
+            // 开关关闭则隐藏链接
+            if (!this.configManager.get("enableAutoUpdateCheck")) {
+                this.setGreasyLinkVisible(false);
+                return;
+            }
+
+            const now = Date.now();
+            const lastCheck = GM_getValue("lastUpdateCheck", 0);
+            const cachedRemote = GM_getValue("latestRemoteVersion", null);
+
+            // 未超间隔则使用缓存
+            if (now - lastCheck < this.updateCheckInterval) {
+                this.applyRemoteVersion(cachedRemote);
+                return;
+            }
+
+            const remoteVersion = await this.fetchLatestRemoteVersion();
+            if (remoteVersion) {
+                GM_setValue("latestRemoteVersion", remoteVersion);
+            }
+            GM_setValue("lastUpdateCheck", now);
+            this.applyRemoteVersion(remoteVersion || cachedRemote);
+        }
+
+        /**
+         * 通过 Greasy Fork API 获取最新版本号
+         * @returns {Promise<string|null>}
+         */
+        fetchLatestRemoteVersion() {
+            return new Promise((resolve) => {
+                GM_xmlhttpRequest({
+                    method: "GET",
+                    url: "https://greasyfork.org/scripts/523540.json",
+                    onload: (res) => {
+                        try {
+                            const data = JSON.parse(res.responseText);
+                            resolve(data.version || null);
+                        } catch (e) {
+                            resolve(null);
+                        }
+                    },
+                    onerror: () => resolve(null),
+                    ontimeout: () => resolve(null),
+                });
+            });
+        }
+
+        /**
+         * 根据远端版本决定是否展示更新链接
+         * @param {string|null} remoteVersion
+         */
+        applyRemoteVersion(remoteVersion) {
+            const hasUpdate = remoteVersion && this.compareVersions(remoteVersion, GM_info.script.version) > 0;
+            if (hasUpdate) {
+                this.greasyForkLink.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                        <path fill="currentColor" d="M5.89 2.227a.28.28 0 0 1 .266.076l5.063 5.062c.54.54.509 1.652-.031 2.192l8.771 8.77c1.356 1.355-.36 3.097-1.73 1.728l-8.772-8.77c-.54.54-1.651.571-2.191.031l-5.063-5.06c-.304-.304.304-.911.608-.608l3.714 3.713L7.59 8.297L3.875 4.582c-.304-.304.304-.911.607-.607l3.715 3.714l1.067-1.066L5.549 2.91c-.228-.228.057-.626.342-.683ZM12 0C5.374 0 0 5.375 0 12s5.374 12 12 12c6.625 0 12-5.375 12-12S18.625 0 12 0" />
+                    </svg>
+                    <span>发现新版本 v${remoteVersion} ！（点击前往Greasy Fork）</span>
+                `;
+            }
+            this.setGreasyLinkVisible(Boolean(hasUpdate));
+        }
+
+        /**
+         * 控制 Greasy Fork 链接显示/隐藏
+         * @param {boolean} visible
+         */
+        setGreasyLinkVisible(visible) {
+            if (this.greasyForkLink) {
+                this.greasyForkLink.style.display = visible ? "inline-flex" : "none";
+            }
+        }
+
+        /**
+         * 语义化版本比较，返回 1/0/-1
+         */
+        compareVersions(v1, v2) {
+            const a = String(v1).split(".").map((n) => parseInt(n, 10) || 0);
+            const b = String(v2).split(".").map((n) => parseInt(n, 10) || 0);
+            const len = Math.max(a.length, b.length);
+            for (let i = 0; i < len; i++) {
+                const diff = (a[i] || 0) - (b[i] || 0);
+                if (diff !== 0) return diff > 0 ? 1 : -1;
+            }
+            return 0;
         }
 
         /**
