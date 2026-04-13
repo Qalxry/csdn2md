@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         csdn2md - 批量下载CSDN文章为Markdown
+// @name         (dev) csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      3.4.0
+// @version      3.4.1
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -129,16 +129,21 @@
                 .replaceAll("⎣", "")
                 .replaceAll("⎤", "]")
                 .replaceAll("⎥", "")
-                .replaceAll("⎦", "");
+                .replaceAll("⎦", "")
+                // 清除 \uXXXX 这样的 ascii 表示的 unicode 符号
+                .replaceAll(/\\u[0-9a-fA-F]{4}/g, "");
         },
 
         /**
-         * 根据长度特征清除字符串中开头的杂乱字符
-         * @param {string} str - 输入字符串
+         * 根据特征清除 LaTeX 源码开头的杂乱文本
+         * @param {HTMLElement} elem - 输入的HTML元素
          * @returns {string} 清理后的字符串
          */
-        clearKatexMathML(str) {
-            const strSplit = str.split(/(?=.*\n)(?=.* )[\s\n]{10,}/);
+        clearKatexMathML(elem) {
+            // 策略1：
+            // 先根据空白字符和换行符分割，取最长的那一段（通常是正文内容），如果分割后有多段且最长的那段明显长于其他段，则认为策略生效
+            const textContent = elem.textContent || "";
+            const strSplit = textContent.split(/(?=.*\n)(?=.* )[\s\n]{10,}/);
             let maxLen = 0;
             let maxStr = "";
             for (const item of strSplit) {
@@ -147,7 +152,22 @@
                     maxStr = item;
                 }
             }
-            return maxStr;
+            // 检查策略是否生效
+            if (strSplit.length > 1) {
+                return maxStr;
+            }
+
+            // 策略2：
+            // 首先用 innerText 截获 可读文本 (先根据空白字符分割，取第一个非空项)
+            // 然后将 textContent 中的 可读文本 去除即可
+            const rubbish = elem.innerText.split(/\s+/).find(item => item.trim().length > 0) || "";
+            const cleanedText = textContent.replace(rubbish, "").trim();
+            if (rubbish.length > 0 && cleanedText.length > 0) {
+                return cleanedText;
+            }
+
+            // 策略3：
+            // 基于 KaTeX 渲染器进行验证，二分搜索切分点
         },
 
         /**
@@ -4019,7 +4039,7 @@
                     }`;
                 } else {
                     return `${this.SEPARATION_BEAUTIFICATION}\$${Utils.clearKatexMathML(
-                        katexMathmlElem.textContent
+                        katexMathmlElem
                     )}\$${this.SEPARATION_BEAUTIFICATION}`;
                 }
             } else {
@@ -4030,7 +4050,7 @@
                     }`;
                 } else {
                     return `${this.CONSTANT_DOUBLE_NEW_LINE}\$\$\n${Utils.clearKatexMathML(
-                        katexMathmlElem.textContent
+                        katexMathmlElem
                     )}\n\$\$${this.CONSTANT_DOUBLE_NEW_LINE}`;
                 }
             }

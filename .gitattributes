@@ -1,0 +1,21 @@
+# 自动规范化所有文本文件的行尾符为 LF
+* text=auto eol=lf
+
+# 明确指定特定文件类型
+*.py text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.sh text eol=lf
+
+# 二进制文件
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.pth binary
+*.safetensors binary
