@@ -4021,13 +4021,20 @@
             if (className.includes("csdn-video-box")) {
                 const iframe = node.querySelector("iframe");
                 if (iframe) {
-                    const src = iframe.getAttribute("src") || "";
+                    let src = iframe.getAttribute("src") || "";
                     const titleElem = node.querySelector("p");
                     const title = titleElem ? titleElem.textContent || "" : "";
 
+                    // 抑制自动播放
+                    src = src.replace(/autoplay=1/g, "autoplay=0");
+                    if (!src.includes("autoplay=")) {
+                        src += (src.includes("?") ? "&" : "?") + "autoplay=0";
+                    }
+                    iframe.setAttribute("src", src);
+
                     const iframeHTML = iframe.outerHTML.replace(
                         "></iframe>",
-                        ' style="width: 100%; aspect-ratio: 2;"></iframe>'
+                        ' style="width: 100%; aspect-ratio: 2;" allow="fullscreen" loading="lazy"></iframe>'
                     );
 
                     return `<div align="center" style="border: 3px solid gray;border-radius: 27px;overflow: hidden;"> <a class="link-info" href="${src}" rel="nofollow" title="${title}">${title}</a>${iframeHTML}</div>\n\n`;
