@@ -16,6 +16,7 @@
 // @require      https://cdn.jsdmirror.com/gh/Qalxry/csdn2md/plugins/jszip.min.js#sha256-yeSlK6wYruTz+Q0F+8pgP1sPW/HOjEXmC7TtOiyy7YY=
 // @require      https://cdn.jsdmirror.com/gh/Qalxry/csdn2md/plugins/fflate.min.js#sha256-w7NPLp9edNTX1k4BysegwBlUxsQGQU1CGFx7U9aHXd8=
 // @require      https://cdn.jsdmirror.com/gh/Qalxry/csdn2md/plugins/streamSaver.min.js#sha256-VxQm++CYEdHipBjKWh4QQHHOYZmyo8F/7dJQxG11xFM=
+// @require      https://cdn.jsdmirror.com/npm/katex@0.16.11/dist/katex.min.js
 // ==/UserScript==
 
 (function () {
@@ -55,6 +56,14 @@
                 "https://use.sevencdn.com/npm/streamsaver@2.0.6/StreamSaver.min.js",
                 "https://cdn.jsdelivr.net/npm/streamsaver@2.0.6/StreamSaver.min.js",
                 "https://cdn.jsdmirror.com/npm/streamsaver@2.0.6/StreamSaver.min.js",
+            ],
+        },
+        katex: {
+            isLoaded: () => typeof katex !== "undefined",
+            urls: [
+                "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js",
+                "https://cdn.jsdmirror.com/npm/katex@0.16.11/dist/katex.min.js",
+                "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.js",
             ],
         },
     };
@@ -135,14 +144,25 @@
         },
 
         /**
-         * 根据特征清除 LaTeX 源码开头的杂乱文本
-         * @param {HTMLElement} elem - 输入的HTML元素
-         * @returns {string} 清理后的字符串
+         * 从 KaTeX 元素中提取 LaTeX 源码
+         * @param {HTMLElement} katexMathmlElem - .katex-mathml 元素
+         * @param {HTMLElement} katexHtmlElem - .katex-html 元素
+         * @param {boolean} isDisplay - 是否为行间公式
+         * @returns {string} 提取的 LaTeX 源码
          */
-        clearKatexMathML(elem) {
-            // 策略1：
+        extractKatexLatex(katexMathmlElem, katexHtmlElem, isDisplay = false) {
+            const textContent = katexMathmlElem.textContent || "";
+            const mathml = Utils.clearSpecialChars(textContent);
+            const katexHtml = Utils.clearSpecialChars(katexHtmlElem.textContent);
+
+            // 策略1：比较 MathML 和 KaTeX HTML 的文本内容
+            // 若 mathml 以 katexHtml 开头，则直接去除前缀
+            if (mathml.startsWith(katexHtml)) {
+                return mathml.replace(katexHtml, "");
+            }
+
+            // 策略2：
             // 先根据空白字符和换行符分割，取最长的那一段（通常是正文内容），如果分割后有多段且最长的那段明显长于其他段，则认为策略生效
-            const textContent = elem.textContent || "";
             const strSplit = textContent.split(/(?=.*\n)(?=.* )[\s\n]{10,}/);
             let maxLen = 0;
             let maxStr = "";
@@ -157,17 +177,48 @@
                 return maxStr;
             }
 
-            // 策略2：
-            // 首先用 innerText 截获 可读文本 (先根据空白字符分割，取第一个非空项)
-            // 然后将 textContent 中的 可读文本 去除即可
-            const rubbish = elem.innerText.split(/\s+/).find(item => item.trim().length > 0) || "";
-            const cleanedText = textContent.replace(rubbish, "").trim();
-            if (rubbish.length > 0 && cleanedText.length > 0) {
-                return cleanedText;
+            // // 策略3：
+            // // 首先用 innerText 截获 可读文本 (先根据空白字符分割，取第一个非空项)
+            // // 然后将 textContent 中的 可读文本 去除即可
+            // const rubbish = katexMathmlElem.innerText.split(/\s+/).find(item => item.trim().length > 0) || "";
+            // const cleanedText = textContent.replace(rubbish, "").trim();
+            // if (rubbish.length > 0 && cleanedText.length > 0) {
+            //     return cleanedText;
+            // }
+
+            // 策略4：
+            // 仅对复杂公式生效，简单公式应当被前面的策略处理掉
+            // 基于 KaTeX 渲染器进行验证，搜索切分点
+            if (typeof katex !== "undefined") {
+                // 启发式：找到第一个 LaTeX 结构字符作为搜索起点
+                const specialIdx = textContent.search(/[\\_{}\^]/);
+                if (specialIdx > 0) {
+                    for (let i = specialIdx; i >= 0; i--) {
+                        const candidate = textContent.substring(i);
+                        try {
+                            const rendered = katex.renderToString(candidate, {
+                                displayMode: isDisplay,
+                                throwOnError: true,
+                                output: "mathml",
+                            });
+                            // 提取 MathML 可读文本（排除 annotation）
+                            const temp = document.createElement("div");
+                            temp.innerHTML = rendered;
+                            const annotation = temp.querySelector("annotation");
+                            if (annotation) annotation.remove();
+                            const generatedPrefix = Utils.clearSpecialChars(temp.textContent);
+                            const candidatePrefix = Utils.clearSpecialChars(textContent.substring(0, i));
+                            if (generatedPrefix === candidatePrefix) {
+                                return candidate;
+                            }
+                        } catch (e) {
+                            continue;
+                        }
+                    }
+                }
             }
 
-            // 策略3：
-            // 基于 KaTeX 渲染器进行验证，二分搜索切分点
+            return textContent; // 如果以上策略都不生效，则返回原始文本
         },
 
         /**
@@ -4027,32 +4078,13 @@
             // 清理KaTeX元素
             this.cleanKatexElements(katexMathmlElem);
 
-            const mathml = Utils.clearSpecialChars(katexMathmlElem.textContent);
-            const katexHtml = Utils.clearSpecialChars(katexHtmlElem.textContent);
+            const isDisplay = !nodeClass.includes("katex--inline");
+            const latex = Utils.extractKatexLatex(katexMathmlElem, katexHtmlElem, isDisplay);
 
-            // 处理行内公式和行间公式
             if (nodeClass.includes("katex--inline")) {
-                // 行内公式
-                if (mathml.startsWith(katexHtml)) {
-                    return `${this.SEPARATION_BEAUTIFICATION}\$${mathml.replace(katexHtml, "")}\$${
-                        this.SEPARATION_BEAUTIFICATION
-                    }`;
-                } else {
-                    return `${this.SEPARATION_BEAUTIFICATION}\$${Utils.clearKatexMathML(
-                        katexMathmlElem
-                    )}\$${this.SEPARATION_BEAUTIFICATION}`;
-                }
+                return `${this.SEPARATION_BEAUTIFICATION}\$${latex}\$${this.SEPARATION_BEAUTIFICATION}`;
             } else {
-                // 行间公式
-                if (mathml.startsWith(katexHtml)) {
-                    return `${this.CONSTANT_DOUBLE_NEW_LINE}\$\$\n${mathml.replace(katexHtml, "")}\n\$\$${
-                        this.CONSTANT_DOUBLE_NEW_LINE
-                    }`;
-                } else {
-                    return `${this.CONSTANT_DOUBLE_NEW_LINE}\$\$\n${Utils.clearKatexMathML(
-                        katexMathmlElem
-                    )}\n\$\$${this.CONSTANT_DOUBLE_NEW_LINE}`;
-                }
+                return `${this.CONSTANT_DOUBLE_NEW_LINE}\$\$\n${latex}\n\$\$${this.CONSTANT_DOUBLE_NEW_LINE}`;
             }
         }
 
