@@ -16,7 +16,7 @@
 // @require      https://cdn.jsdmirror.com/gh/Qalxry/csdn2md/plugins/jszip.min.js#sha256-yeSlK6wYruTz+Q0F+8pgP1sPW/HOjEXmC7TtOiyy7YY=
 // @require      https://cdn.jsdmirror.com/gh/Qalxry/csdn2md/plugins/fflate.min.js#sha256-w7NPLp9edNTX1k4BysegwBlUxsQGQU1CGFx7U9aHXd8=
 // @require      https://cdn.jsdmirror.com/gh/Qalxry/csdn2md/plugins/streamSaver.min.js#sha256-VxQm++CYEdHipBjKWh4QQHHOYZmyo8F/7dJQxG11xFM=
-// @require      https://cdn.jsdmirror.com/npm/katex@0.16.11/dist/katex.min.js
+// @require      https://cdn.jsdmirror.com/gh/Qalxry/csdn2md/plugins/katex.min.js#sha256-5r/l3uvUx8zScgVbq2O9OrLHO5B7bmoi01J0CoE4H9Q=
 // ==/UserScript==
 
 (function () {
@@ -53,17 +53,19 @@
             urls: [
                 "https://cdn.jsdelivr.net/gh/Qalxry/csdn2md/plugins/streamSaver.min.js#sha256-VxQm++CYEdHipBjKWh4QQHHOYZmyo8F/7dJQxG11xFM=",
                 "https://cdn.jsdmirror.com/gh/Qalxry/csdn2md/plugins/streamSaver.min.js#sha256-VxQm++CYEdHipBjKWh4QQHHOYZmyo8F/7dJQxG11xFM=",
-                "https://use.sevencdn.com/npm/streamsaver@2.0.6/StreamSaver.min.js",
-                "https://cdn.jsdelivr.net/npm/streamsaver@2.0.6/StreamSaver.min.js",
-                "https://cdn.jsdmirror.com/npm/streamsaver@2.0.6/StreamSaver.min.js",
+                "https://use.sevencdn.com/npm/streamsaver@2.0.6/StreamSaver.min.js#sha256-VxQm++CYEdHipBjKWh4QQHHOYZmyo8F/7dJQxG11xFM=",
+                "https://cdn.jsdelivr.net/npm/streamsaver@2.0.6/StreamSaver.min.js#sha256-VxQm++CYEdHipBjKWh4QQHHOYZmyo8F/7dJQxG11xFM=",
+                "https://cdn.jsdmirror.com/npm/streamsaver@2.0.6/StreamSaver.min.js#sha256-VxQm++CYEdHipBjKWh4QQHHOYZmyo8F/7dJQxG11xFM=",
             ],
         },
         katex: {
             isLoaded: () => typeof katex !== "undefined",
             urls: [
-                "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js",
-                "https://cdn.jsdmirror.com/npm/katex@0.16.11/dist/katex.min.js",
-                "https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.js",
+                "https://cdn.jsdelivr.net/gh/Qalxry/csdn2md/plugins/katex.min.js#sha256-5r/l3uvUx8zScgVbq2O9OrLHO5B7bmoi01J0CoE4H9Q=",
+                "https://cdn.jsdmirror.com/gh/Qalxry/csdn2md/plugins/katex.min.js#sha256-5r/l3uvUx8zScgVbq2O9OrLHO5B7bmoi01J0CoE4H9Q=",
+                "https://use.sevencdn.com/npm/katex@0.16.11/dist/katex.min.js#sha256-5r/l3uvUx8zScgVbq2O9OrLHO5B7bmoi01J0CoE4H9Q=",
+                "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js#sha256-5r/l3uvUx8zScgVbq2O9OrLHO5B7bmoi01J0CoE4H9Q=",
+                "https://cdn.jsdmirror.com/npm/katex@0.16.11/dist/katex.min.js#sha256-5r/l3uvUx8zScgVbq2O9OrLHO5B7bmoi01J0CoE4H9Q=",
             ],
         },
     };
