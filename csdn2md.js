@@ -3396,12 +3396,13 @@
                 enableMarkdownEscape: true,
                 markdownEscapePattern: "`*_[]{}()#+-.!",
             };
-
+            
             // 合并用户配置和默认配置，并添加上下文信息
             const context = {
                 ...defaultConfig,
                 ...config,
                 listLevel: 0,
+                isInTableCell: false,
             };
 
             // 处理文章元素的子节点
@@ -3489,8 +3490,8 @@
          */
         specialTrim(text = "") {
             return text
-                .replace(new RegExp(`^(?:${this.SEPB}|\\s)+`), "")
-                .replace(new RegExp(`(?:${this.SEPB}|\\s)+$`), "");
+                .replace(new RegExp(`^(?:${this.DDNL}|${this.SEPB}|\\s)+`), "")
+                .replace(new RegExp(`(?:${this.DDNL}|${this.SEPB}|\\s)+$`), "");
         }
 
         /**
@@ -3982,10 +3983,12 @@
          */
         async handleTableCell(node, context) {
             // 递归处理子节点
+            context.isInTableCell = true; // 标记当前在表格单元格内，供后续处理使用
             let content = await this.processChildren(node, context);
+            context.isInTableCell = false;
 
             // 去除首尾空白
-            content = content.trim();
+            content = this.specialTrim(content);
 
             // 先做统一的后处理，把双换行标记替换为 <br/>
             content = this.postProcessMarkdown(content, {
@@ -4051,7 +4054,7 @@
             // 处理KaTeX数学公式
             if (nodeClass) {
                 if (nodeClass.includes("katex--inline") || nodeClass.includes("katex--display")) {
-                    return this.handleKatexElement(node, nodeClass);
+                    return this.handleKatexElement(node, nodeClass, context);
                 }
             }
 
@@ -4069,7 +4072,7 @@
         /**
          * 处理KaTeX数学公式元素
          */
-        handleKatexElement(node, nodeClass) {
+        handleKatexElement(node, nodeClass, context) {
             const katexMathmlElem = node.querySelector(".katex-mathml");
             const katexHtmlElem = node.querySelector(".katex-html");
 
@@ -4079,11 +4082,15 @@
             this.cleanKatexElements(katexMathmlElem);
 
             const isDisplay = !nodeClass.includes("katex--inline");
-            const latex = Utils.extractKatexLatex(katexMathmlElem, katexHtmlElem, isDisplay);
+            let latex = Utils.extractKatexLatex(katexMathmlElem, katexHtmlElem, isDisplay);
 
             if (nodeClass.includes("katex--inline")) {
                 return `${this.SEPARATION_BEAUTIFICATION}\$${latex}\$${this.SEPARATION_BEAUTIFICATION}`;
             } else {
+                if (context.isInTableCell) {
+                    latex = latex.replaceAll("\n", " "); // 表格内的块级公式去掉换行，避免表格错位
+                    return `${this.CONSTANT_DOUBLE_NEW_LINE}\$\$${latex}\$\$${this.CONSTANT_DOUBLE_NEW_LINE}`;
+                }
                 return `${this.CONSTANT_DOUBLE_NEW_LINE}\$\$\n${latex}\n\$\$${this.CONSTANT_DOUBLE_NEW_LINE}`;
             }
         }
