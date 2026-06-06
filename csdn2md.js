@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      3.4.1
+// @version      3.4.2
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -1069,6 +1069,13 @@
                 defaultValue: true,
                 container: downloadGroup,
                 tooltip: "启用后，批量下载的文件名将根据下方模板生成",
+            });
+            this.addBoolOption({
+                id: "reverseBatchFileNo",
+                label: "批量编号按旧文章到新文章",
+                defaultValue: true,
+                container: downloadGroup,
+                tooltip: "启用后，{no} 将从专栏最后一篇/旧文章开始正序编号；<br>关闭后，从专栏第一篇/新文章开始正序编号。",
             });
             this.addStringOption({
                 id: "customFileNamePattern",
@@ -4960,7 +4967,7 @@
             await Utils.parallelPool(
                 url_list,
                 async (url, index) => {
-                    const articleIndex = totalArticleCount - index; // 反向
+                    const articleIndex = config.reverseBatchFileNo ? totalArticleCount - index : index + 1;
                     if (articleIndex >= config.startArticleIndex && articleIndex <= config.endArticleIndex) {
                         await this.downloadOneArticleFromBatch(url, articleIndex, totalArticleCount, config);
                     }
@@ -5328,7 +5335,7 @@
             await Utils.parallelPool(
                 url_list,
                 async (url, index) => {
-                    const articleIndex = totalArticleCount - index; // 反向
+                    const articleIndex = config.reverseBatchFileNo ? totalArticleCount - index : index + 1;
                     if (articleIndex >= config.startArticleIndex && articleIndex <= config.endArticleIndex) {
                         await this.downloadOneArticleFromBatch(url, articleIndex, totalArticleCount, config);
                     }
