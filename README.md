@@ -9,7 +9,9 @@
 `csdn2md` 是一个用于***批量下载 CSDN 文章、专栏、用户全部文章并将其转换为 Markdown 文件***的工具。提供**油猴脚本**版本。
 
 ***安装油猴脚本*** 👇
+
 方式1：**[(GreasyFork) csdn2md - 批量下载CSDN文章为Markdown](https://greasyfork.org/scripts/523540)**（推荐，支持推送更新）
+
 方式2：**[(GitHub Release) csdn2md - 批量下载CSDN文章为Markdown](https://github.com/Qalxry/csdn2md/releases/latest)**
 
 ![界面](./assets/main.jpg)
