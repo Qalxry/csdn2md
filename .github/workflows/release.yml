@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - '[0-9]*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check userscript syntax
+        run: node --check csdn2md.user.js
+
+      - name: Generate Release Body
+        run: |
+          cat > /tmp/custom_body.md << 'CUSTOM_EOF'
+          ## 📦 安装方式
+
+          | 来源 | 链接 |
+          |------|------|
+          | **GreasyFork** | [csdn2md - 批量下载CSDN文章为Markdown](https://greasyfork.org/scripts/523540) |
+          | **GitHub Release** | 点击下方附件 (`csdn2md.user.js`) 即可触发安装 |
+
+          ---
+
+          CUSTOM_EOF
+
+          gh api "repos/${{ github.repository }}/releases/generate-notes" \
+            -f tag_name="${{ github.ref_name }}" \
+            -q .body >> /tmp/custom_body.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body_path: /tmp/custom_body.md
+          files: csdn2md.user.js

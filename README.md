@@ -8,7 +8,7 @@
 
 `csdn2md` 是一个用于***批量下载 CSDN 文章、专栏、用户全部文章并将其转换为 Markdown 文件***的工具。提供**油猴脚本**版本。
 
-***安装油猴脚本 👉 [(greasyfork) csdn2md - 批量下载CSDN文章为Markdown](https://greasyfork.org/en/scripts/523540-csdn2md-%E6%89%B9%E9%87%8F%E4%B8%8B%E8%BD%BDcsdn%E6%96%87%E7%AB%A0%E4%B8%BAmarkdown)***
+***安装油猴脚本*** 👉 **[（推荐）(GreasyFork) csdn2md - 批量下载CSDN文章为Markdown](https://greasyfork.org/scripts/523540) | [(GitHub Release) csdn2md - 批量下载CSDN文章为Markdown](https://github.com/Qalxry/csdn2md/releases/latest)**
 
 ![界面](./assets/main.jpg)
 
@@ -110,19 +110,13 @@
 
 ## 安装与使用
 
-1. **安装 Tampermonkey 插件**：
-   - 前往 [Tampermonkey 官网](https://www.tampermonkey.net/) 根据浏览器类型安装 Tampermonkey 插件。
+1. **安装 Tampermonkey 插件**：前往 [Tampermonkey 官网](https://www.tampermonkey.net/) 根据浏览器类型安装 Tampermonkey 插件。
 
-2. **安装 `csdn2md` 脚本**：
-   - 访问 [Greasy Fork 上的 csdn2md 脚本页面](https://greasyfork.org/en/scripts/523540-csdn2md-%E6%89%B9%E9%87%8F%E4%B8%8B%E8%BD%BDcsdn%E6%96%87%E7%AB%A0%E4%B8%BAmarkdown) 安装 `csdn2md` 脚本。
-   - 安装完成后，刷新并访问 CSDN 文章/专栏页时会在页面右下角出现下载按钮。
+2. **安装 `csdn2md` 脚本**：访问 [GreasyFork 上的 csdn2md 脚本页面（推荐）](https://greasyfork.org/scripts/523540) 或 [GitHub Release 页面](https://github.com/Qalxry/csdn2md/releases/latest) 安装 `csdn2md` 脚本。安装完成后，刷新并访问 CSDN 文章/专栏页时会在页面右下角出现下载按钮。
 
-3. **使用脚本下载**：
-   - 打开需要下载的 CSDN 文章或专栏页面，点击页面右下角的下载按钮即可将内容保存为 Markdown 文件。
-   - 建议使用 [Typora](https://typora.io/) 打开下载的 Markdown 文件以获得最佳显示效果。
+3. **使用脚本下载**：打开需要下载的 CSDN 文章或专栏页面，点击页面右下角的下载按钮即可将内容保存为 Markdown 文件。建议使用 [Typora](https://typora.io/) 打开下载的 Markdown 文件以获得最佳显示效果。
 
-4. **注意事项**：
-   - 由于 CSDN 前端页面可能会变动，脚本可能无法正确识别。请务必检查下载的 Markdown 文件是否符合预期。若有问题，请提交 Issue 反馈。
+4. **注意事项**：由于 CSDN 前端页面可能会变动，脚本可能无法正确识别。请务必检查下载的 Markdown 文件是否符合预期。若有问题，请提交 Issue 反馈。
 
 ## 对比效果
 
