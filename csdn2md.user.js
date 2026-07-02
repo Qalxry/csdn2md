@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         csdn2md - 批量下载CSDN文章为Markdown
 // @namespace    http://tampermonkey.net/
-// @version      3.4.3
+// @version      3.5.0
 // @description  下载CSDN文章为Markdown格式，支持专栏批量下载。CSDN排版经过精心调教，最大程度支持CSDN的全部Markdown语法：KaTeX内联公式、KaTeX公式块、图片、内联代码、代码块、Bilibili视频控件、有序/无序/任务/自定义列表、目录、注脚、加粗斜体删除线下滑线高亮、内容居左/中/右、引用块、链接、快捷键（kbd）、表格、上下标、甘特图、UML图、FlowChart流程图
 // @author       ShizuriYuki
 // @match        https://*.csdn.net/*
@@ -1244,6 +1244,27 @@
                 defaultValue: "`*_[]{}()#+-.!",
                 container: contentGroup,
                 tooltip: "填入字符即可，这不是正则表达式，注意不要空格",
+            });
+            this.addBoolOption({
+                id: "downloadComments",
+                label: "下载文章评论",
+                defaultValue: false,
+                container: contentGroup,
+                tooltip: "从CSDN API获取评论，以楼层形式添加到Markdown末尾",
+            });
+            this.addBoolOption({
+                id: "downloadCommentsEmoji",
+                label: "保留评论中的CSDN表情",
+                defaultValue: true,
+                container: contentGroup,
+                tooltip: "将[face]标签转换为图片；关闭后直接移除表情标签",
+            });
+            this.addBoolOption({
+                id: "downloadCommentsReverse",
+                label: "最新评论在最前",
+                defaultValue: true,
+                container: contentGroup,
+                tooltip: "开启后最新评论排在前面",
             });
 
             // 批量文章处理组
@@ -4508,10 +4529,177 @@
                 markdown = `---\n${articleMeta}---\n\n${markdown}`;
             }
 
+            // 下载评论（如果开启了评论下载开关）
+            if (config.downloadComments && config.articleUrl) {
+                const commentsMd = await this.fetchComments(config.articleUrl, config);
+                markdown += commentsMd;
+            }
+
             // 这里不启用流式压缩，在解析结束时会统一压缩，文本占用内存比较小
             await this.fileManager.addTextFile(markdown, `${fileName}.md`, fileIndex, false);
 
             return articleTitle;
+        }
+
+        /**
+         * 从CSDN API获取文章的评论并转换为Markdown格式
+         * @param {string} articleUrl - 文章URL
+         * @param {Object} config - 配置选项
+         * @returns {Promise<string>} 评论的Markdown内容
+         */
+        async fetchComments(articleUrl, config = {}) {
+            const articleIdMatch = articleUrl.match(/\/article\/details\/(\d+)/);
+            if (!articleIdMatch) return "";
+            const articleId = articleIdMatch[1];
+
+            let allComments = [];
+            let page = 1;
+            let hasMore = true;
+
+            while (hasMore) {
+                const apiUrl = `https://blog.csdn.net/phoenix/web/v1/comment/list/${articleId}?page=${page}&size=100&fold=unfold&commentId=`;
+                try {
+                    const response = await this.fileManager.fetchResource(
+                        apiUrl,
+                        "json",
+                        config.downloadAssetRetryCount || 3,
+                        config.downloadAssetRetryDelay || 1000,
+                        "GM_xmlhttpRequest"
+                    );
+                    if (response.code === 200) {
+                        allComments = allComments.concat(response.data.list);
+                        if (page >= response.data.pageCount) {
+                            hasMore = false;
+                        }
+                        page++;
+                    } else {
+                        break;
+                    }
+                } catch (e) {
+                    console.dir(`获取评论失败: ${e.message || e}`);
+                    break;
+                }
+            }
+
+            if (allComments.length === 0) return "";
+
+            let md = `\n\n---\n\n## 评论 · 共 ${allComments.length} 条\n\n`;
+
+            // 按时间升序生成固定楼层号（最旧=#1，最新=#N）
+            const commentsAsc = [...allComments].sort((a, b) =>
+                a.info.postTime.localeCompare(b.info.postTime)
+            );
+            const floorMap = new Map();
+            commentsAsc.forEach((item, i) => floorMap.set(item.info.commentId, i + 1));
+
+            // 按开关决定遍历顺序
+            const sortedComments = [...allComments].sort((a, b) => {
+                const cmp = a.info.postTime.localeCompare(b.info.postTime);
+                return config.downloadCommentsReverse ? -cmp : cmp;
+            });
+            for (const item of sortedComments) {
+                const info = item.info;
+                const floorNo = floorMap.get(info.commentId);
+
+                const author = this._escapeCommentText(info.nickName || info.userName);
+                const decodedContent = this._decodeHtmlEntities(info.content);
+                const contentRaw = await this._replaceFaceTags(decodedContent, config);
+                const content = this._escapeCommentText(contentRaw);
+
+                if (floorNo > 1) md += `---\n\n`;
+                md += `**#${floorNo}** **${author}** · ${info.postTime} · 点赞 ${info.digg}\n`;
+                md += `${content}\n\n`;
+
+                // 子评论（回复）
+                if (item.sub && item.sub.length > 0) {
+                    const subsSorted = [...item.sub].sort((a, b) =>
+                        a.postTime.localeCompare(b.postTime)
+                    );
+                    for (const sub of subsSorted) {
+                        const subAuthor = this._escapeCommentText(sub.nickName || sub.userName);
+                        const subTarget = this._escapeCommentText(sub.parentNickName || sub.parentUserName || "");
+                        const subDecoded = this._decodeHtmlEntities(sub.content);
+                        const subContentRaw = await this._replaceFaceTags(subDecoded, config);
+                        const subContent = this._escapeCommentText(subContentRaw);
+                        const targetPart = subTarget ? ` **${subTarget}**` : "";
+                        md += `> **${subAuthor}** 回复${targetPart} · ${sub.postTime} · 点赞 ${sub.digg}\n`;
+                        md += `> ${subContent}\n\n`;
+                    }
+                }
+            }
+
+            return md;
+        }
+
+        /**
+         * 将CSDN评论中的[face]标签替换为图片（支持下载到本地）
+         * 格式: [face]emoji:061.png[/face] → https://g.csdnimg.cn/static/face/emoji/061.png
+         * @param {string} text - 原始文本
+         * @param {Object} [config={}] - 配置选项（用于图片下载）
+         * @returns {Promise<string>} 替换后的文本
+         */
+        async _replaceFaceTags(text, config = {}) {
+            if (!text || !text.includes("[face]")) return text;
+            // 如果开关关闭，直接移除所有[face]标签
+            if (config.downloadCommentsEmoji === false) {
+                return text.replace(/\[face\][^\]]+:[^\]]+\[\/face\]/gi, "");
+            }
+            const regex = /\[face\]([^\]]+):([^\]]+)\[\/face\]/gi;
+            const parts = [];
+            let lastIndex = 0;
+            let match;
+            while ((match = regex.exec(text)) !== null) {
+                parts.push(text.slice(lastIndex, match.index));
+                const type = match[1];
+                const filename = match[2];
+                const imgUrl = `https://g.csdnimg.cn/static/face/${type}/${filename}`;
+                try {
+                    let src = imgUrl;
+                    if (config.saveWebImages) {
+                        const localPath = await this.fileManager.addWebImageFile(
+                            imgUrl,
+                            config.assetDirName || "assets",
+                            "emoji_",  // 表情使用独立前缀，避免与文章图片冲突
+                            config.enableStreaming || false,
+                            config.downloadAssetRetryCount || 3,
+                            config.downloadAssetRetryDelay || 1000
+                        );
+                        src = localPath;
+                    }
+                    parts.push(`<img src="${src}" alt="表情" style="height:1em;vertical-align:middle" />`);
+                } catch (e) {
+                    console.dir(`表情图片下载失败: ${e.message || e}`);
+                    parts.push(`<img src="${imgUrl}" alt="表情" style="height:1em;vertical-align:middle" />`);
+                }
+                lastIndex = regex.lastIndex;
+            }
+            parts.push(text.slice(lastIndex));
+            return parts.join("");
+        }
+
+        /**
+         * 将HTML实体解码为对应字符（支持所有命名实体和数值实体）
+         * @param {string} text - 包含HTML实体的文本
+         * @returns {string} 解码后的文本
+         */
+        _decodeHtmlEntities(text) {
+            if (!text) return "";
+            // 用临时DOM元素一次性解码所有HTML实体（&amp; &lt; &gt; &#123; &#x1F; 等全部支持）
+            const textarea = document.createElement("textarea");
+            textarea.innerHTML = text;
+            return textarea.value;
+        }
+
+        /**
+         * 转义评论文本中可能破坏Markdown结构的特殊字符
+         * @param {string} text - 原始文本
+         * @returns {string} 转义后的文本
+         */
+        _escapeCommentText(text) {
+            if (!text) return "";
+            return text
+                // 转义行首的 > 防止破坏blockquote（评论内容以 > 开头时会被误认为嵌套引用）
+                .replace(/^>/gm, "\\>");
         }
 
         /**
